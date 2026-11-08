@@ -1,0 +1,10 @@
+.git
+.data
+node_modules
+.env*
+demo-accounts.txt
+deployment-accounts.txt
+*-preview.png
+preview.png
+test
+public

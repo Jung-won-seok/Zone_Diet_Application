@@ -1,0 +1,21 @@
+{
+  "name": "leben-zonda",
+  "version": "0.1.0",
+  "private": true,
+  "description": "크로스핏 존다 8주 프로그램 · 로그인과 팀 역할 관리",
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check app.js && node --check admin.js && node --check meals.js && node --check server.js && node --check meals-server.js && node --check cloud-storage.js && node --check api/handler.js",
+    "test": "node --test test/*.test.js",
+    "build": "node scripts/build.js"
+  },
+  "dependencies": {
+    "@vercel/blob": "^2.8.2"
+  },
+  "engines": {
+    "node": "24.x"
+  },
+  "overrides": {
+    "zod": "^4.6.6"
+  }
+}

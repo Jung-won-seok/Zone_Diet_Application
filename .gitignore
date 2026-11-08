@@ -1,0 +1,16 @@
+.data/
+node_modules/
+.DS_Store
+*.log
+.vercel
+.env*
+
+.vercel/
+.env*
+!.env.example
+demo-accounts.txt
+deployment-accounts.txt
+*-preview.png
+preview.png
+
+public/

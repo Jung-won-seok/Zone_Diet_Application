@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#204b3e">
+  <title>레벤 존다 · 팀 프로그램</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="admin.css">
+  <link rel="stylesheet" href="meals.css">
+  <script src="admin.js" defer></script>
+  <script src="meals.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body class="auth-pending">
+  <div id="login-root"></div>
+  <aside class="sidebar">
+    <a class="brand" href="#today"><span class="brand-mark">L<span>↗</span></span><span>LEBEN ZONDA<small>BOX WELLNESS CLUB</small></span></a>
+    <div class="program-label">나의 다이어트 프로그램</div>
+    <nav aria-label="주 메뉴">
+      <a href="#today" data-page="today"><span class="nav-icon">◫</span>오늘의 현황</a>
+      <a href="#record" data-page="record"><span class="nav-icon">＋</span>데일리 기록</a>
+      <a href="#progress" data-page="progress"><span class="nav-icon">↗</span>나의 변화</a>
+    </nav>
+    <div class="sidebar-note"><span class="tiny-label">ONE DAY AT A TIME</span><p>꾸준함이 만드는<br>나만의 변화.</p><div class="line-art" aria-hidden="true">↗</div></div>
+    <a href="#settings" class="settings-link" data-page="settings">⚙ <span>프로그램 설정</span></a>
+    <div class="local-label"><span></span> 계정별로 안전하게 저장됩니다</div>
+  </aside>
+  <main>
+    <header class="topbar"><span>MEMBER SPACE <span class="divider">/</span> <span id="page-label">오늘의 현황</span></span><span class="profile"><span class="avatar">LZ</span> 나의 프로그램</span></header>
+    <div id="app"></div>
+    <footer>LEBEN ZONDA <span>작은 기록이 쌓여, 건강한 습관이 됩니다.</span><span class="prototype">테스트 프로그램</span></footer>
+  </main>
+  <div id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
