@@ -8,7 +8,9 @@ async function createCloudContext() {
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   if (!token) throw new ApiError(503, '온라인 저장소가 연결되지 않았습니다. 관리자에게 문의해주세요.');
   const options = { access: 'private', token };
-  const read = pathname => get(pathname, { ...options, useCache: false });
+  // Keep the storage ETag strong: compressed GET responses may use a weak ETag,
+  // which cannot be used for the next conditional write.
+  const read = pathname => get(pathname, { ...options, useCache: false, headers: { 'accept-encoding': 'identity' } });
   let result = await read(STORE_PATH);
   if (!result) {
     let passwords;
