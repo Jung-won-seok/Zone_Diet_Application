@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
 const MEALS = ['breakfast', 'lunch', 'dinner'];
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const MAX_PHOTOS = 6;
+const BLOCK_KEYS = ['carbs', 'protein', 'fat'];
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 
@@ -28,6 +29,16 @@ function createMealService({ getStore, commit, mediaDir, mediaStorage, ApiError 
     assert(typeof value === 'string' && value.length <= maximum, `설명은 ${maximum}자 이내로 입력해주세요.`);
     return value.trim();
   }
+  const normalizedBlocks = value => Object.fromEntries(BLOCK_KEYS.map(key => [key, typeof value?.[key] === 'number' ? value[key] : null]));
+  function validateBlocks(value) {
+    assert(object(value) && Object.keys(value).length === BLOCK_KEYS.length && BLOCK_KEYS.every(key => Object.hasOwn(value, key)), '탄수화물·단백질·지방 블록을 확인해주세요.');
+    for (const key of BLOCK_KEYS) {
+      const count = value[key];
+      assert(count === null || (typeof count === 'number' && Number.isFinite(count) && count >= 0 && count <= 100 && Number(count.toFixed(2)) === count), '블록은 0~100 사이의 숫자로 소수점 둘째 자리까지 입력해주세요. 미입력 항목은 비워둘 수 있습니다.');
+    }
+    return normalizedBlocks(value);
+  }
+  const publicReport = report => report ? { ...report, posts: report.posts.map(post => ({ ...post, blocks: normalizedBlocks(post.blocks) })) } : null;
   const membership = (store, userId) => store.members.find(member => member.id === userId);
   const revisionKey = (teamId, date) => `${teamId}|${date}`;
   const revision = (store, teamId, date) => `${store.revision}:${store.mealRevisions[revisionKey(teamId, date)] || 0}`;
@@ -41,7 +52,7 @@ function createMealService({ getStore, commit, mediaDir, mediaStorage, ApiError 
   }
   function publicPost(store, post) {
     const photos = postMediaIds(post).map(id => ({ id, url: `/api/media/${id}` }));
-    return { id: post.id, memberId: post.memberId, name: store.users.find(user => user.id === post.memberId).name, date: post.date, meal: post.meal, caption: post.caption, photos, imageUrl: photos[0]?.url || '', version: post.version, createdAt: post.createdAt, updatedAt: post.updatedAt };
+    return { id: post.id, memberId: post.memberId, name: store.users.find(user => user.id === post.memberId).name, date: post.date, meal: post.meal, caption: post.caption, blocks: normalizedBlocks(post.blocks), photos, imageUrl: photos[0]?.url || '', version: post.version, createdAt: post.createdAt, updatedAt: post.updatedAt };
   }
   function feed(session, date, requestedTeamId) {
     const store = getStore(), own = membership(store, session.user.id);
@@ -54,7 +65,7 @@ function createMealService({ getStore, commit, mediaDir, mediaStorage, ApiError 
       members: team ? store.members.filter(member => member.teamId === teamId).map(member => ({ id: member.id, name: store.users.find(user => user.id === member.id).name, role: member.role, customRole: member.customRole })) : [],
       posts: team ? currentPosts(store, teamId, date).map(post => publicPost(store, post)) : [],
       revision: revision(store, teamId || 'unassigned', date),
-      report: team ? store.mealReports.find(report => report.teamId === teamId && report.date === date) || null : null,
+      report: team ? publicReport(store.mealReports.find(report => report.teamId === teamId && report.date === date)) : null,
       canPublish: Boolean(team && !session.user.isAdmin && own?.role === 'diet'),
     };
   }
@@ -84,10 +95,12 @@ function createMealService({ getStore, commit, mediaDir, mediaStorage, ApiError 
     assert(body.expectedTeamId === own.teamId, '식단을 작성하는 동안 소속 팀이 변경되었습니다. 현재 팀을 확인한 뒤 다시 저장해주세요.', 409);
     const existing = store.mealPosts.find(post => post.memberId === session.user.id && post.teamId === own.teamId && post.date === date && post.meal === body.meal);
     assert(body.expectedVersion === (existing?.version || 0), '다른 창에서 식단이 변경되었습니다. 최신 내용을 불러온 뒤 다시 저장해주세요.', 409);
+    const blocks = body.blocks === undefined ? normalizedBlocks(existing?.blocks) : validateBlocks(body.blocks);
     const hasPhotos = body.photos !== undefined, hasImage = body.imageData !== undefined;
     assert(!(hasPhotos && hasImage), '사진 목록과 단일 사진을 동시에 지정할 수 없습니다.');
     const photos = hasPhotos ? body.photos : hasImage ? [{ imageData: body.imageData }] : postMediaIds(existing).map(id => ({ id }));
-    assert(Array.isArray(photos) && photos.length >= 1 && photos.length <= MAX_PHOTOS, '식단 사진은 한 끼에 1~6장까지 올릴 수 있습니다.');
+    assert(Array.isArray(photos) && photos.length <= MAX_PHOTOS, '식단 사진은 한 끼에 최대 6장까지 올릴 수 있습니다.');
+    assert(photos.length > 0 || BLOCK_KEYS.some(key => blocks[key] !== null), '사진을 선택하거나 탄단지 블록을 하나 이상 입력해주세요.');
     const existingIds = new Set(postMediaIds(existing)), selectedIds = new Set(), uploads = [];
     const mediaIds = photos.map(photo => {
       assert(object(photo) && ((photo.id !== undefined) !== (photo.imageData !== undefined)), '유지할 사진 또는 새 사진을 올바르게 선택해주세요.');
@@ -103,7 +116,7 @@ function createMealService({ getStore, commit, mediaDir, mediaStorage, ApiError 
       return id;
     });
     const timestamp = new Date().toISOString();
-    const post = { id: existing?.id || crypto.randomUUID(), memberId: session.user.id, teamId: own.teamId, date, meal: body.meal, caption: text, mediaId: mediaIds[0], mediaIds, version: (existing?.version || 0) + 1, createdAt: existing?.createdAt || timestamp, updatedAt: timestamp };
+    const post = { id: existing?.id || crypto.randomUUID(), memberId: session.user.id, teamId: own.teamId, date, meal: body.meal, caption: text, blocks, mediaId: mediaIds[0], mediaIds, version: (existing?.version || 0) + 1, createdAt: existing?.createdAt || timestamp, updatedAt: timestamp };
     const mealPosts = existing ? store.mealPosts.map(row => row.id === existing.id ? post : row) : [...store.mealPosts, post];
     const key = revisionKey(own.teamId, date);
     const media = { ...store.media };
@@ -135,7 +148,7 @@ function createMealService({ getStore, commit, mediaDir, mediaStorage, ApiError 
     assert(body.expectedReportVersion === (existing?.version || 0), '다른 창에서 공개 정리가 변경되었습니다. 최신 정리를 확인한 뒤 다시 게시해주세요.', 409);
     const team = store.teams.find(team => team.id === own.teamId);
     const posts = currentPosts(store, team.id, date).map(post => publicPost(store, post));
-    assert(posts.length > 0, '정리할 식단 사진이 하나 이상 필요합니다.');
+    assert(posts.length > 0, '정리할 식단 기록이 하나 이상 필요합니다.');
     const members = store.members.filter(member => member.teamId === team.id).map(member => ({ id: member.id, name: store.users.find(user => user.id === member.id).name }));
     const report = { id: existing?.id || crypto.randomUUID(), teamId: team.id, teamName: team.name, date, caption: text, publishedBy: { id: session.user.id, name: session.user.name }, publishedAt: new Date().toISOString(), version: (existing?.version || 0) + 1, sourceRevision, members, posts, completedCount: posts.length, expectedCount: members.length * 3 };
     assert(getStore() === store, '게시 중 다른 기록이 변경되었습니다. 최신 내용을 불러온 뒤 다시 게시해주세요.', 409);
@@ -157,7 +170,7 @@ function createMealService({ getStore, commit, mediaDir, mediaStorage, ApiError 
     if (user.isAdmin) return {};
     const store = getStore(), own = membership(store, user.id), counts = {};
     if (!own?.teamId) return counts;
-    for (const post of store.mealPosts) if (post.memberId === user.id && post.teamId === own.teamId) counts[post.date] = (counts[post.date] || 0) + 1;
+    for (const post of store.mealPosts) if (post.memberId === user.id && post.teamId === own.teamId && postMediaIds(post).length) counts[post.date] = (counts[post.date] || 0) + 1;
     return counts;
   }
   async function handle(req, res, session, url, readJson, send) {
@@ -169,7 +182,7 @@ function createMealService({ getStore, commit, mediaDir, mediaStorage, ApiError 
     }
     if (url.pathname === '/api/reports' && req.method === 'GET') {
       const date = validDate(url.searchParams.get('date') || today());
-      send(res, 200, { date, reports: getStore().mealReports.filter(report => report.date === date).sort((a,b) => a.teamId.localeCompare(b.teamId)) }); return true;
+      send(res, 200, { date, reports: getStore().mealReports.filter(report => report.date === date).sort((a,b) => a.teamId.localeCompare(b.teamId)).map(publicReport) }); return true;
     }
     if (url.pathname === '/api/reports' && req.method === 'POST') {
       send(res, 200, await publishReport(session, await readJson(req))); return true;

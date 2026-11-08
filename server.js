@@ -5,7 +5,7 @@ const crypto = require('node:crypto');
 const { createMealService } = require('./meals-server');
 const CORE_ROLES = ['diet', 'leader', 'mission', 'sns'];
 const SESSION_AGE = 8 * 60 * 60 * 1000;
-const STATIC = { '/': ['index.html','text/html'], '/index.html': ['index.html','text/html'], '/styles.css': ['styles.css','text/css'], '/app.js': ['app.js','text/javascript'], '/admin.js': ['admin.js','text/javascript'], '/admin.css': ['admin.css','text/css'], '/meals.js': ['meals.js','text/javascript'], '/meals.css': ['meals.css','text/css'] };
+const STATIC = { '/meal-summary.js': ['meal-summary.js','text/javascript'], '/cafe-draft.js': ['cafe-draft.js','text/javascript'], '/cafe-draft.css': ['cafe-draft.css','text/css'], '/': ['index.html','text/html'], '/index.html': ['index.html','text/html'], '/styles.css': ['styles.css','text/css'], '/app.js': ['app.js','text/javascript'], '/admin.js': ['admin.js','text/javascript'], '/admin.css': ['admin.css','text/css'], '/meals.js': ['meals.js','text/javascript'], '/meals.css': ['meals.css','text/css'] };
 class ApiError extends Error { constructor(status, message) { super(message); this.status = status; } }
 const fail = (condition, message) => { if (!condition) throw new ApiError(422, message); };
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
