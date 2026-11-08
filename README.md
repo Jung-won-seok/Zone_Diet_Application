@@ -2,6 +2,8 @@
 
 크로스핏 존다 8주 프로그램용 팀 관리 앱입니다. 회원 20명, 관리자 1명, 기본 5개 팀으로 시작합니다.
 
+온라인 데모: https://zone-diet-application.vercel.app
+
 ## 실행
 
 Node.js 24 LTS를 사용합니다.
@@ -32,6 +34,8 @@ npm run build
 ```
 
 ## Vercel 배포
+
+GitHub의 `Jung-won-seok/Zone_Diet_Application` 저장소와 Vercel의 `zone-diet-application` 프로젝트가 연결되어 있습니다. `main` 브랜치에 푸시하면 프로덕션 자동 배포가 실행됩니다. 배포 결과는 Vercel 프로젝트의 Deployments에서 확인할 수 있습니다.
 
 `vercel.json`은 정적 화면과 Node.js API를 함께 배포합니다. 서버리스 실행 환경에서 로컬 파일 시스템에 기록을 저장하지 않습니다.
 
