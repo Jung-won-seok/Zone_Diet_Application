@@ -1,4 +1,4 @@
-const labels = { today: '오늘의 현황', team: '우리 팀 식단', board: '전체 식단', record: '데일리 기록', progress: '나의 변화', settings: '내 설정', admin: '팀 · 역할 관리', accounts: '회원 계정' };
+const labels = { today: '오늘의 현황', team: '우리 팀 식단', board: '전체 식단', record: '데일리 기록', progress: '나의 변화', settings: '내 설정', admin: '팀 · 역할 관리', accounts: '회원 계정', naver: '네이버 카페 연결' };
 const blankState = () => ({ settings: { name: '', startWeight: '', goalWeight: '' }, records: {} });
 let state = blankState();
 let session = null;
@@ -38,12 +38,13 @@ function loginView(error = '') {
 }
 function renderShell() {
   document.body.classList.toggle('is-admin', session.isAdmin);
-  const routes = session.isAdmin ? [['admin','▦','팀 · 역할 관리'], ['accounts','◫','회원 계정'], ['board','▧','전체 식단']] : [['today','◫','오늘'],['team','♧','우리 팀'],['board','▧','전체 식단'],['record','＋','기록'],['progress','↗','변화']];
+  const routes = session.isAdmin ? [['admin','▦','팀 · 역할 관리'], ['accounts','◫','회원 계정'], ['naver','N','네이버 카페 연결'], ['board','▧','전체 식단']] : [['today','◫','오늘'],['team','♧','우리 팀'],['board','▧','전체 식단'],['record','＋','기록'],['progress','↗','변화']];
   document.querySelector('.sidebar nav').innerHTML = routes.map(([id,icon,label]) => `<a href="#${id}" data-page="${id}"><span class="nav-icon">${icon}</span>${label}</a>`).join('');
   document.querySelector('.program-label').textContent = session.isAdmin ? '관리자 워크스페이스' : bootstrap.program.name;
   document.querySelector('.settings-link').style.display = session.isAdmin ? 'none' : '';
   document.querySelector('.profile').innerHTML = `<span class="avatar">${session.isAdmin ? 'AD' : escapeHTML(session.name.slice(-2))}</span><span>${escapeHTML(session.name)}</span><button id="logout-button" type="button">로그아웃</button>`;
   document.querySelector('#logout-button').addEventListener('click', async () => {
+    if (naverIsDirty() && !confirm('저장하지 않은 카페 연결 설정이 있습니다. 로그아웃할까요?')) return;
     if(mealsHasUnsaved() && !await confirmMealDiscard()) return;
     if (typeof adminIsDirty === 'function' && adminIsDirty() && !confirm('저장하지 않은 팀 편성 변경이 있습니다. 로그아웃할까요?')) return;
     try { await api('/api/logout', {method:'POST',body:'{}'}); session = null; bootstrap = null; csrfToken = ''; state = blankState(); resetAdminDraft(); location.hash = ''; render(); }
@@ -90,6 +91,7 @@ function settingsView() {
 function render() {
   if (!authReady) return;
   cleanupMeals();
+  cleanupNaverUI();
   renderedHash = location.hash;
   document.body.classList.remove('auth-pending');
   document.body.classList.toggle('logged-out', !session);
@@ -109,14 +111,16 @@ function render() {
   }
   loginRoot.innerHTML = ''; renderShell();
   const [route,date] = location.hash.slice(1).split('/');
-  const allowed = session.isAdmin ? ['admin','accounts','board'] : ['today','team','board','record','progress','settings'];
+  const allowed = session.isAdmin ? ['admin','accounts','naver','board'] : ['today','team','board','record','progress','settings'];
   const page = allowed.includes(route) ? route : allowed[0];
   document.querySelector('#page-label').textContent = labels[page];
   document.querySelector('.topbar > span:first-child').firstChild.textContent = session.isAdmin ? 'ADMIN SPACE ' : 'MEMBER SPACE ';
   document.querySelectorAll('[data-page]').forEach(node => { node.classList.toggle('active', node.dataset.page === page); if (node.dataset.page === page) node.setAttribute('aria-current','page'); else node.removeAttribute('aria-current'); });
   const validDate = date && /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(`${date}T12:00:00`)) && date <= todayKey();
-  app.innerHTML = ({today:todayView,team:()=>mealLoadingView(false),board:()=>mealLoadingView(true),record:()=>recordView(validDate ? date : todayKey()),progress:progressView,settings:settingsView,admin:adminView,accounts:accountsView})[page]();
+  app.innerHTML = ({today:todayView,team:()=>mealLoadingView(false),board:()=>mealLoadingView(true),record:()=>recordView(validDate ? date : todayKey()),progress:progressView,settings:settingsView,admin:adminView,accounts:accountsView,naver:naverAdminView})[page]();
   if (page === 'admin') bindAdmin();
+  if (page === 'naver') mountNaverAdmin();
+  if (page === 'settings') { app.insertAdjacentHTML('beforeend', naverMemberView()); mountNaverMember(); }
   if (page === 'team' || page === 'board') mountMeals(page === 'board', validDate ? date : todayKey());
   document.querySelector('#record-date')?.addEventListener('change', event => { if(event.target.checkValidity()) location.hash = `record/${event.target.value}`; });
   document.querySelector('#record-form')?.addEventListener('submit', async event => {
@@ -133,6 +137,11 @@ function render() {
   window.scrollTo(0,0);
 }
 window.addEventListener('hashchange', async () => {
+  if (naverIsDirty()) {
+    const nextHash = location.hash; history.replaceState(null, '', renderedHash || location.pathname);
+    if (!confirm('저장하지 않은 카페 연결 설정을 버리고 이동할까요?')) return;
+    history.replaceState(null, '', nextHash || location.pathname);
+  }
   if(mealsHasUnsaved()) {
     const nextHash=location.hash;
     history.replaceState(null, '', renderedHash || location.pathname);
@@ -142,7 +151,7 @@ window.addEventListener('hashchange', async () => {
   }
   render();
 });
-window.addEventListener('beforeunload', event => { if(adminIsDirty() || mealsHasUnsaved()) { event.preventDefault(); event.returnValue = ''; } });
+window.addEventListener('beforeunload', event => { if(adminIsDirty() || mealsHasUnsaved() || naverIsDirty()) { event.preventDefault(); event.returnValue = ''; } });
 (async () => {
   try { const result = await api('/api/session'); session = result.user; csrfToken = result.csrfToken || ''; if(session) await loadBootstrap(); }
   catch(error) { session = null; toast('서버에 연결하지 못했습니다. 잠시 후 새로고침해주세요.'); }

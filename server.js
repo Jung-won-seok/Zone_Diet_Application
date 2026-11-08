@@ -3,9 +3,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { createMealService } = require('./meals-server');
+const { createNaverAuth } = require('./naver-auth');
+const { createNaverCafe } = require('./naver-cafe');
 const CORE_ROLES = ['diet', 'leader', 'mission', 'sns'];
 const SESSION_AGE = 8 * 60 * 60 * 1000;
-const STATIC = { '/meal-summary.js': ['meal-summary.js','text/javascript'], '/cafe-draft.js': ['cafe-draft.js','text/javascript'], '/cafe-draft.css': ['cafe-draft.css','text/css'], '/': ['index.html','text/html'], '/index.html': ['index.html','text/html'], '/styles.css': ['styles.css','text/css'], '/app.js': ['app.js','text/javascript'], '/admin.js': ['admin.js','text/javascript'], '/admin.css': ['admin.css','text/css'], '/meals.js': ['meals.js','text/javascript'], '/meals.css': ['meals.css','text/css'] };
+const STATIC = { '/naver-ui.js': ['naver-ui.js','text/javascript'], '/naver-ui.css': ['naver-ui.css','text/css'], '/meal-summary.js': ['meal-summary.js','text/javascript'], '/cafe-draft.js': ['cafe-draft.js','text/javascript'], '/cafe-draft.css': ['cafe-draft.css','text/css'], '/': ['index.html','text/html'], '/index.html': ['index.html','text/html'], '/styles.css': ['styles.css','text/css'], '/app.js': ['app.js','text/javascript'], '/admin.js': ['admin.js','text/javascript'], '/admin.css': ['admin.css','text/css'], '/meals.js': ['meals.js','text/javascript'], '/meals.css': ['meals.css','text/css'] };
 class ApiError extends Error { constructor(status, message) { super(message); this.status = status; } }
 const fail = (condition, message) => { if (!condition) throw new ApiError(422, message); };
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -76,7 +78,7 @@ function validateAssignments(body, store) {
     return { id: row.id, teamId: row.teamId, role: row.role, customRole };
   });
 }
-function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '.data'), initialStore, persistStore, mediaStorage, cloud = false, allowedHosts = [] } = {}) {
+function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '.data'), initialStore, persistStore, mediaStorage, cloud = false, allowedHosts = [], naverConfig, naverFetch = globalThis.fetch } = {}) {
   if (!initialStore) fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
   const storePath = path.join(dataDir, 'store.json');
   function persist(next) {
@@ -102,6 +104,18 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
   async function persistAuth() {
     if (cloud) await commit({ ...store, authState: { sessions: Object.fromEntries(sessions), failures: Object.fromEntries(failures) } });
   }
+  const naverAuth = createNaverAuth({ getStore: () => store, commit, ApiError, fetchImpl: naverFetch,
+    config: naverConfig || { clientId: process.env.NAVER_CLIENT_ID, clientSecret: process.env.NAVER_CLIENT_SECRET, callbackUrl: process.env.NAVER_CALLBACK_URL, encryptionKey: process.env.NAVER_TOKEN_ENCRYPTION_KEY },
+    isSessionActive: (userId, sessionHash) => [...sessions].some(([token, value]) => value.userId === userId && value.expires > Date.now() && crypto.createHash('sha256').update(token).digest('hex') === sessionHash),
+  });
+  const naverCafe = createNaverCafe({ getStore: () => store, commit, ApiError, auth: naverAuth, fetchImpl: naverFetch,
+    readPhoto: async (id, userId) => {
+      const media = store.media?.[id];
+      if (!/^[a-f0-9]{32}$/.test(id) || !media || media.memberId !== userId) throw new ApiError(403, '본인의 식단 사진만 카페에 게시할 수 있습니다.');
+      const buffer = mediaStorage ? await mediaStorage.read(id) : await fs.promises.readFile(path.join(dataDir, 'media', id));
+      return { buffer: Buffer.from(buffer), mime: media.mime };
+    },
+  });
   const dummySalt = crypto.randomBytes(16).toString('hex'), dummyHash = hashPassword(crypto.randomBytes(24).toString('hex'),dummySalt);
   const sessionCookie = (token, age = SESSION_AGE / 1000) => `zonda_session=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${age}${cloud ? '; Secure' : ''}`;
   function getSession(req) {
@@ -155,6 +169,7 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
       for (const [token,s] of sessions) if (s.expires <= Date.now()) sessions.delete(token);
       for (const [key,a] of failures) if (a.until <= Date.now()) failures.delete(key);
       const session = getSession(req);
+      if (route === '/api/naver/callback' && req.method === 'GET') { await naverAuth.callback(req, res, url, origin); return; }
       if (route === '/api/session' && req.method === 'GET') { send(res,200,session ? { user: publicUser(session.user), csrfToken: session.csrfToken } : { user:null }); return; }
       if (route === '/api/login' && req.method === 'POST') {
         const body = await readJson(req);
@@ -176,6 +191,8 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
         if (mutation && req.headers['x-csrf-token'] !== session.csrfToken) throw new ApiError(403,'로그인 화면을 새로 불러온 후 다시 시도해주세요.');
         if (route === '/api/logout' && req.method === 'POST') { sessions.delete(session.token); await persistAuth(); send(res,200,{ok:true},{'Set-Cookie':sessionCookie('',0)}); return; }
         if (route === '/api/bootstrap' && req.method === 'GET') { send(res,200,bootstrap(session)); return; }
+        if (await naverAuth.handle(req, res, session, url, readJson, send, origin)) return;
+        if (await naverCafe.handle(req, res, session, url, readJson, send)) return;
         if (await meals.handle(req, res, session, url, readJson, send)) return;
         if (route.startsWith('/api/admin/') && !session.user.isAdmin) throw new ApiError(403,'관리자만 팀과 역할을 변경할 수 있습니다.');
         if (route === '/api/admin/assignments' && req.method === 'PUT') {
