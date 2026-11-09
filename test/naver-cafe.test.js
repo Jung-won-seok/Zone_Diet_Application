@@ -11,6 +11,7 @@ function harness() {
     users:[{id:'admin',username:'admin',name:'관리자',isAdmin:true},{id:'u01',username:'member01',name:'김민준',isAdmin:false},{id:'u02',username:'member02',name:'이지우',isAdmin:false}],
     program:{id:'program-1',startDate:'2026-04-21',endDate:'2026-06-15'},
     members:[{id:'u01',teamId:'t1'},{id:'u02',teamId:'t2'}],
+    naverCafeRequests:{u01:{status:'approved',memberId:'u01',connectionId:'connection-1',clubId:'31811778',cafeUrl:'https://cafe.naver.com/mycaffelatte',programId:'program-1'},u02:{status:'approved',memberId:'u02',connectionId:'connection-2',clubId:'31811778',cafeUrl:'https://cafe.naver.com/mycaffelatte',programId:'program-1'}},
     personal:{u01:{weight:70,privateNote:'PRIVATE WEIGHT NOTE'}},
     mealPosts:[
       {id:'meal-1',memberId:'u01',teamId:'t1',date:DATE,meal:'breakfast',caption:'달걀 <script>unsafe()</script>',blocks:{carbs:3,protein:2.5,fat:1},mediaIds:[A,B],version:1},

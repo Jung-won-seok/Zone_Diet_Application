@@ -69,6 +69,12 @@ function createNaverCafe({getStore, commit, ApiError, auth, readPhoto, fetchImpl
       assert(!menuId || !menus.has(menuId),'동일한 게시판을 여러 회원에게 배정할 수 없습니다.');if(menuId)menus.add(menuId);
       const connection=auth.publicConnection(row.memberId);
       assert(!approvedConnectionId || (menuId && label && connection.connected && !connection.needsReconnect && approvedConnectionId===connection.connectionId),'회원이 직접 연결한 현재 네이버 계정만 승인할 수 있습니다.');
+      if(approvedConnectionId) {
+        const previous=boardOf(config,row.memberId);
+        const retained=previous.approvedConnectionId===approvedConnectionId && config.cafe.clubId===cafe.clubId && config.cafe.url===cafe.url;
+        const consented=Object.values(store.naverCafeRequests||{}).some(r=>r.status==='approved' && r.memberId===row.memberId && r.connectionId===approvedConnectionId && r.clubId===cafe.clubId && r.cafeUrl===cafe.url && r.programId===store.program.id);
+        assert(retained || consented,'회원의 카페 연결 신청을 먼저 확인하고 승인해주세요.');
+      }
       boards[row.memberId]={menuId,label,approvedConnectionId};
     }
     const program={...store.program,startDate};

@@ -5,10 +5,10 @@ const crypto = require('node:crypto');
 const { createMealService } = require('./meals-server');
 const { createNaverAuth } = require('./naver-auth');
 const { createNaverCafe } = require('./naver-cafe');
+const { createNaverOnboarding } = require('./naver-onboarding');
 const CORE_ROLES = ['diet', 'leader', 'mission', 'sns'];
 const SESSION_AGE = 8 * 60 * 60 * 1000;
 const STATIC = { '/naver-ui.js': ['naver-ui.js','text/javascript'], '/naver-ui.css': ['naver-ui.css','text/css'], '/meal-summary.js': ['meal-summary.js','text/javascript'], '/cafe-draft.js': ['cafe-draft.js','text/javascript'], '/cafe-draft.css': ['cafe-draft.css','text/css'], '/': ['index.html','text/html'], '/index.html': ['index.html','text/html'], '/styles.css': ['styles.css','text/css'], '/app.js': ['app.js','text/javascript'], '/admin.js': ['admin.js','text/javascript'], '/admin.css': ['admin.css','text/css'], '/meals.js': ['meals.js','text/javascript'], '/meals.css': ['meals.css','text/css'] };
-for (const file of ['glass.css','glass-admin.css','glass-meals.css','icons.js']) STATIC['/' + file] = [file, file.endsWith('.css') ? 'text/css' : 'text/javascript'];
 class ApiError extends Error { constructor(status, message) { super(message); this.status = status; } }
 const fail = (condition, message) => { if (!condition) throw new ApiError(422, message); };
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -18,7 +18,7 @@ function makeUser(id, username, name, password, isAdmin = false) {
   return { id, username, name, isAdmin, salt, passwordHash: hashPassword(password, salt) };
 }
 const blankPersonal = (name = '') => ({ settings: { name, startWeight: '', goalWeight: '' }, records: {} });
-const publicUser = user => ({ id: user.id, username: user.username, name: user.name, isAdmin: user.isAdmin });
+const publicUser = user => ({ id: user.id, username: user.username, name: user.name, isAdmin: user.isAdmin, ...(user.pendingApproval ? {pendingApproval:true} : {}) });
 function seedStore(passwords = {}) {
   const names = ['김민준','이서연','박지훈','최수빈','정도윤','강하은','조현우','윤지우','장준서','임서윤','한시우','오지민','서예준','신채원','권도현','황민서','안건우','송수아','류정우','홍예린'];
   const users = [makeUser('admin', 'admin', '존다 관리자', passwords.admin || 'ZondaAdmin!Demo27', true)], members = [], personal = {};
@@ -107,8 +107,20 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
   }
   const naverAuth = createNaverAuth({ getStore: () => store, commit, ApiError, fetchImpl: naverFetch,
     config: naverConfig || { clientId: process.env.NAVER_CLIENT_ID, clientSecret: process.env.NAVER_CLIENT_SECRET, callbackUrl: process.env.NAVER_CALLBACK_URL, encryptionKey: process.env.NAVER_TOKEN_ENCRYPTION_KEY },
-    isSessionActive: (userId, sessionHash) => [...sessions].some(([token, value]) => value.userId === userId && value.expires > Date.now() && crypto.createHash('sha256').update(token).digest('hex') === sessionHash),
+    isSessionActive: (userId, sessionHash) => [...sessions].some(([token,value]) => value.expires > Date.now() && crypto.createHash('sha256').update(token).digest('hex') === sessionHash && getSession({headers:{cookie:'zonda_session='+token}})?.user.id === userId),
+    establishSession: async (userId, req, res, expectedIdentity) => {
+      const identity = store.naverConnections?.[userId] || store.naverApplicants?.[userId];
+      if (!identity?.connectionId || !identity.providerIdHash || !expectedIdentity || ['connectionId','providerIdHash','appHash'].some(key=>identity[key]!==expectedIdentity[key])) throw new ApiError(409, '네이버 로그인 정보를 다시 확인해주세요.');
+      const token = crypto.randomBytes(32).toString('hex'), csrfToken = crypto.randomBytes(32).toString('hex');
+      const old = getSession(req);
+      if (old) sessions.delete(old.token);
+      sessions.set(token,{userId,csrfToken,expires:Date.now()+SESSION_AGE,naverIdentity:{...expectedIdentity}});
+      try { await persistAuth(); }
+      catch (error) { sessions.delete(token); if(old)sessions.set(old.token,{userId:old.originUserId,csrfToken:old.csrfToken,expires:old.expires,...(old.naverIdentity?{naverIdentity:old.naverIdentity}:{})}); throw error; }
+      res.setHeader('Set-Cookie',sessionCookie(token));
+    },
   });
+  const naverOnboarding = createNaverOnboarding({getStore:()=>store,commit,ApiError,auth:naverAuth});
   const naverCafe = createNaverCafe({ getStore: () => store, commit, ApiError, auth: naverAuth, fetchImpl: naverFetch,
     readPhoto: async (id, userId) => {
       const media = store.media?.[id];
@@ -123,10 +135,16 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
     const token = (req.headers.cookie || '').split(';').map(x => x.trim()).find(x => x.startsWith('zonda_session='))?.slice('zonda_session='.length);
     const s = token && sessions.get(token);
     if (!s || s.expires <= Date.now()) { if (token) sessions.delete(token); return null; }
-    const user = store.users.find(u => u.id === s.userId);
-    return user ? { ...s, token, user } : null;
+    const user = store.users.find(u => u.id === s.userId) || naverAuth.resolveApplicant(s.userId);
+    if (!user) return null;
+    if (s.naverIdentity) {
+      const identity = user.pendingApproval ? store.naverApplicants?.[s.userId] : store.naverConnections?.[user.id];
+      if (!identity || ['connectionId','providerIdHash','appHash'].some(key=>identity[key]!==s.naverIdentity[key])) return null;
+    }
+    return { ...s, token, originUserId:s.userId, user };
   }
   function bootstrap(s) {
+    if(s.user.pendingApproval)return {user:publicUser(s.user),csrfToken:s.csrfToken,program:store.program,teams:[],members:[],personal:blankPersonal(s.user.name),personalRevision:0,photoMealCounts:{},revision:0,onboarding:naverOnboarding.state(s)};
     const own = store.members.find(m => m.id === s.user.id);
     const members = store.members.filter(m => s.user.isAdmin || m.id === s.user.id || (own?.teamId && m.teamId === own.teamId));
     return { user: publicUser(s.user), csrfToken: s.csrfToken, program: store.program, teams: store.teams, members: members.map(m => { const u = store.users.find(u => u.id === m.id); return { id: u.id, username: u.username, name: u.name, teamId: m.teamId, role: m.role, customRole: m.customRole }; }), personal: s.user.isAdmin ? blankPersonal() : store.personal[s.user.id], personalRevision: store.personalRevisions[s.user.id] || 0, photoMealCounts: meals.photoMealCounts(s.user), revision: store.revision };
@@ -171,6 +189,7 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
       for (const [key,a] of failures) if (a.until <= Date.now()) failures.delete(key);
       const session = getSession(req);
       if (route === '/api/naver/callback' && req.method === 'GET') { await naverAuth.callback(req, res, url, origin); return; }
+      if (await naverAuth.publicHandle(req,res,url,readJson,send,origin,session)) return;
       if (route === '/api/session' && req.method === 'GET') { send(res,200,session ? { user: publicUser(session.user), csrfToken: session.csrfToken } : { user:null }); return; }
       if (route === '/api/login' && req.method === 'POST') {
         const body = await readJson(req);
@@ -190,19 +209,32 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
       if (route.startsWith('/api/')) {
         if (!session) throw new ApiError(401,'로그인이 필요합니다.');
         if (mutation && req.headers['x-csrf-token'] !== session.csrfToken) throw new ApiError(403,'로그인 화면을 새로 불러온 후 다시 시도해주세요.');
+        const readAuthenticatedJson = async (request, limit) => {
+          const body = await readJson(request, limit);
+          const latest = getSession(req);
+          if (!latest || latest.token !== session.token || latest.user.id !== session.user.id || latest.user.isAdmin !== session.user.isAdmin || Boolean(latest.user.pendingApproval) !== Boolean(session.user.pendingApproval) || latest.csrfToken !== session.csrfToken) {
+            throw new ApiError(401,'로그인 상태가 변경됐어요. 다시 로그인한 뒤 요청해주세요.');
+          }
+          return body;
+        };
         if (route === '/api/logout' && req.method === 'POST') { sessions.delete(session.token); await persistAuth(); send(res,200,{ok:true},{'Set-Cookie':sessionCookie('',0)}); return; }
         if (route === '/api/bootstrap' && req.method === 'GET') { send(res,200,bootstrap(session)); return; }
-        if (await naverAuth.handle(req, res, session, url, readJson, send, origin)) return;
-        if (await naverCafe.handle(req, res, session, url, readJson, send)) return;
-        if (await meals.handle(req, res, session, url, readJson, send)) return;
+        if (await naverOnboarding.handle(req,res,session,url,readAuthenticatedJson,send)) return;
+        if(session.user.pendingApproval) {
+          if(route==='/api/naver/status'&&req.method==='GET'){const state=naverOnboarding.state(session);send(res,200,{configuration:state.configuration,connection:state.connection});return;}
+          throw new ApiError(403,'카페 연동 신청 후 관리자가 회원과 게시판을 연결하면 이용할 수 있습니다.');
+        }
+        if (await naverAuth.handle(req, res, session, url, readAuthenticatedJson, send, origin)) return;
+        if (await naverCafe.handle(req, res, session, url, readAuthenticatedJson, send)) return;
+        if (await meals.handle(req, res, session, url, readAuthenticatedJson, send)) return;
         if (route.startsWith('/api/admin/') && !session.user.isAdmin) throw new ApiError(403,'관리자만 팀과 역할을 변경할 수 있습니다.');
         if (route === '/api/admin/assignments' && req.method === 'PUT') {
-          const members = validateAssignments(await readJson(req),store), next = { ...store, members, revision:store.revision + 1 };
+          const members = validateAssignments(await readAuthenticatedJson(req),store), next = { ...store, members, revision:store.revision + 1 };
           await commit(next); send(res,200,bootstrap(session)); return;
         }
         if (route === '/api/personal' && req.method === 'PUT') {
           if (session.user.isAdmin) throw new ApiError(403,'회원 계정으로 개인 기록을 작성해주세요.');
-          const body = await readJson(req);
+          const body = await readAuthenticatedJson(req);
           fail(object(body) && Number.isInteger(body.personalRevision) && body.personalRevision >= 0, '개인 기록 버전을 확인해주세요. 화면을 새로 불러온 뒤 다시 시도해주세요.');
           const currentRevision = store.personalRevisions[session.user.id] || 0;
           if (body.personalRevision !== currentRevision) throw new ApiError(409, '다른 창에서 개인 기록이 변경되었습니다. 입력한 내용을 복사한 뒤 최신 기록을 불러와 다시 저장해주세요.');

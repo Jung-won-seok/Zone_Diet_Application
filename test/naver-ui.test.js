@@ -27,9 +27,54 @@ test('administrator approval requires the authenticated current connection and e
   let html=c.naverMemberRow(member);
   assert.match(html,/data-naver-approve\s+disabled/);assert.doesNotMatch(html,/<img src=x/);assert.match(html,/김&lt;민준&gt;/);
   member.connection={connected:true,connectionId:'current',displayName:'<script>bad</script>'};member.board.approvedConnectionId='old';
-  html=c.naverMemberRow(member);assert.doesNotMatch(html,/data-naver-approve checked/);assert.match(html,/&lt;script&gt;/);
+  html=c.naverMemberRow(member);assert.doesNotMatch(html,/data-naver-approve checked/);assert.match(html,/data-naver-approve\s+disabled/);assert.match(html,/&lt;script&gt;/);assert.match(html,/새 승인은 위의 카페 연결 요청/);
   member.board.approvedConnectionId='current';assert.match(c.naverMemberRow(member),/data-naver-approve checked/);
   member.connection.needsReconnect=true;assert.match(c.naverMemberRow(member),/data-naver-approve\s+disabled/);
+});
+test('login redirect accepts only the official Naver authorization endpoint',()=>{
+  const c=context();
+  assert.equal(c.naverAuthorizeUrl('https://nid.naver.com/oauth2.0/authorize?state=test'),'https://nid.naver.com/oauth2.0/authorize?state=test');
+  for(const value of ['http://nid.naver.com/oauth2.0/authorize','https://nid.naver.com.evil.test/oauth2.0/authorize','https://nid.naver.com/login','https://user@nid.naver.com/oauth2.0/authorize','javascript:alert(1)'])assert.throws(()=>c.naverAuthorizeUrl(value));
+});
+const onboardingData=()=>({cafe:{name:'존다 카페',url:'https://cafe.naver.com/mycaffelatte',clubId:'31811778'},configuration:{ready:true},connection:{connected:true,displayName:'김민준',connectionId:'c1'},request:null,approved:false,needsRequest:true});
+test('initial onboarding requires explicit consent and offers deferral before a request',()=>{
+  const c=context(), data=onboardingData(), html=c.naverOnboardingContent(data);
+  assert.match(html,/name="name" required maxlength="30"/);assert.match(html,/name="cafeNickname" required/);
+  assert.match(html,/name="consent" type="checkbox" required/);assert.doesNotMatch(html,/name="consent"[^>]*checked/);
+  assert.match(html,/관리자에게 연결 요청/);assert.match(html,/id="skip-naver-onboarding">나중에/);
+  const deferred=c.naverOnboardingContent(data,true);
+  assert.match(deferred,/아직 관리자에게 요청을 보내지 않았습니다/);assert.doesNotMatch(deferred,/<form/);
+  data.configuration.ready=false;
+  assert.match(c.naverOnboardingContent(data),/id="onboarding-connect-naver"[^>]+disabled/);assert.doesNotMatch(c.naverOnboardingContent(data),/id="naver-link-request"/);
+});
+test('onboarding shows waiting, rejected, stale and approved states without faking approval',()=>{
+  const c=context(), data=onboardingData();
+  data.request={status:'pending',name:'김<민준>',cafeNickname:'민준',requestedBoardName:'2기',stale:false};
+  let html=c.naverOnboardingContent(data);assert.match(html,/관리자 확인 대기/);assert.match(html,/연결 상태 새로고침/);assert.doesNotMatch(html,/id="naver-link-request"/);assert.match(html,/김&lt;민준&gt;/);
+  data.request.status='rejected';data.request.reason='<img src=x>';
+  html=c.naverOnboardingContent(data);assert.match(html,/id="naver-link-request"/);assert.match(html,/&lt;img src=x&gt;/);assert.doesNotMatch(html,/<img src=x>/);
+  data.request.status='pending';data.request.stale=true;html=c.naverOnboardingContent(data);assert.match(html,/새로 신청해주세요/);assert.match(html,/id="naver-link-request"/);
+  data.approved=true;data.board={menuId:'7',label:'김민준 게시판'};html=c.naverOnboardingContent(data);assert.match(html,/내 카페 게시판이 연결됐어요/);assert.match(html,/김민준 게시판/);assert.match(html,/네이버 카페에 올리기/);assert.doesNotMatch(html,/id="naver-link-request"/);
+});
+test('administrator manually selects an app member and board; occupied members cannot be reassigned',()=>{
+  const c=context(), data={configuration:{ready:true},members:[{id:'u01',username:'member01',name:'김민준',hasConnection:false},{id:'u02',username:'member02',name:'박민준',hasConnection:true}],requests:[{id:'r1',name:'김민준',naverName:'인증<이름>',cafeNickname:'카페 닉네임',requestedBoardName:'김민준',status:'pending',version:1,memberId:null}]};
+  let html=c.naverRequestsView(data);
+  assert.match(html,/value="" selected disabled/);assert.doesNotMatch(html,/value="u01"[^>]*selected/);assert.match(html,/value="u02"\s+disabled/);
+  assert.match(html,/member01 · 김민준/);assert.match(html,/name="memberName" required maxlength="30" value="김민준"/);
+  assert.match(html,/name="menuId" required[^>]+placeholder=/);assert.doesNotMatch(html,/name="menuId"[^>]*value="/);
+  assert.match(html,/name="confirmed" type="checkbox" required/);assert.match(html,/기존 앱 회원 계정과 그 기록을 이 네이버 회원에게 연결/);assert.match(html,/인증&lt;이름&gt;/);
+  data.requests[0].memberId='u01';html=c.naverRequestsView(data);assert.match(html,/value="u01" selected/);assert.match(html,/value="u02"\s+disabled/);assert.match(html,/다른 회원으로 바꿀 수 없습니다/);
+  data.requests[0].stale=true;assert.match(c.naverRequestsView(data),/value="approve" disabled/);
+});
+test('preserved review drafts do not restore consent for a changed request or unavailable member',()=>{
+  const fields={memberId:{value:'',selectedOptions:[{disabled:false}]},memberName:{value:'새 신청 이름'},confirmed:{type:'checkbox',value:'on',checked:false}};
+  const form={dataset:{requestId:'r1'},elements:{...fields,namedItem:name=>fields[name]}};
+  const c=context({document:{querySelectorAll:()=>[form]}});
+  vm.runInContext("naverAdminPage={requestsData:{requests:[{id:'r1',version:2}]}}",c);
+  const draft={id:'r1',version:1,fields:[{name:'memberName',value:'이전 이름'},{name:'memberId',value:'u01'},{name:'confirmed',value:'on',checked:true}]};
+  c.restoreNaverReviewDrafts([draft]);assert.equal(fields.memberName.value,'새 신청 이름');assert.equal(fields.confirmed.checked,false);
+  draft.version=2;c.restoreNaverReviewDrafts([draft]);assert.equal(fields.memberName.value,'이전 이름');assert.equal(fields.confirmed.checked,true);
+  fields.memberId.selectedOptions[0].disabled=true;c.restoreNaverReviewDrafts([draft]);assert.equal(fields.memberId.value,'');assert.equal(fields.confirmed.checked,false);
 });
 test('recent pending publication cannot be reconciled and absent confirmation is explicit',()=>{
   const c=context(), base={memberId:'u01',memberName:'김민준',date:'2026-11-08',status:'pending',createdAt:new Date().toISOString()};
@@ -47,6 +92,14 @@ class Element {
   addEventListener(name,fn){this.listeners[name]=fn;}
   focus(){} select(){}
 }
+test('Naver login remains disabled without configuration and redirects only after a click',async()=>{
+  const root=new Element();root.innerHTML='<button id="naver-login-button"></button><p id="naver-login-status"></p><p id="naver-login-error"></p>';
+  const calls=[], redirects=[], configuration={ready:false};
+  const c=context({document:root,location:{hash:'',assign:value=>redirects.push(value)},api:async(url,options)=>{calls.push({url,options});return url.endsWith('/login-config')?{configuration}:{authorizeUrl:'https://nid.naver.com/oauth2.0/authorize?state=test'};}});
+  await c.mountNaverLogin();assert.equal(root.querySelector('#naver-login-button').disabled,true);assert.match(root.querySelector('#naver-login-status').textContent,/설정을 준비/);assert.equal(calls.length,1);
+  configuration.ready=true;await c.mountNaverLogin();assert.equal(root.querySelector('#naver-login-button').disabled,false);assert.equal(redirects.length,0);
+  await root.querySelector('#naver-login-button').onclick();assert.equal(calls[2].url,'/api/naver/login');assert.equal(calls[2].options.method,'POST');assert.deepEqual(redirects,['https://nid.naver.com/oauth2.0/authorize?state=test']);
+});
 function draftHarness() {
   const dialog=new Element(), close=new Element(), calls=[];
   const response={draft:MealSummary.buildDraft({date:'2026-11-08',startDate:'2026-11-08',memberId:'u01',name:'김민준',posts:[]}),title:'11.8일 존다 1일차',bodyHtml:'<p>서버에서 확인한 식단</p>',summary:{},target:{clubId:'31811778',cafeUrl:'https://cafe.naver.com/mycaffelatte',cafeName:'카페',menuId:'7',boardName:'김민준'},connection:{connected:true,displayName:'김민준'},previewVersion:'exact-preview',readyToPublish:true,reasons:[]};

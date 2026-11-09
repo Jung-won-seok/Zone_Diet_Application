@@ -3,12 +3,14 @@ const TOKEN_URL = 'https://nid.naver.com/oauth2.0/token';
 const PROFILE_URL = 'https://openapi.naver.com/v1/nid/me';
 const REVOKE_URL = 'https://nid.naver.com/oauth2.0/revoke';
 const COOKIE = 'zonda_naver_oauth';
+const LOGIN_COOKIE = 'zonda_naver_login_oauth';
 const CALLBACK_PATH = '/api/naver/callback';
 const STATE_AGE = 10 * 60 * 1000;
+const MAX_OAUTH_STATES = 200;
 const hash = value => crypto.createHash('sha256').update(String(value)).digest('hex');
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 
-function createNaverAuth({ getStore, commit, ApiError, config = {}, fetchImpl = fetch, isSessionActive = () => false }) {
+function createNaverAuth({ getStore, commit, ApiError, config = {}, fetchImpl = fetch, isSessionActive = () => false, establishSession }) {
   const fields = {clientId:'NAVER_CLIENT_ID',clientSecret:'NAVER_CLIENT_SECRET',callbackUrl:'NAVER_CALLBACK_URL',encryptionKey:'NAVER_TOKEN_ENCRYPTION_KEY'};
   let key = null, callbackURL = null;
   try {
@@ -35,6 +37,24 @@ function createNaverAuth({ getStore, commit, ApiError, config = {}, fetchImpl = 
     const connected = Boolean(record?.connectionId && record.appHash === applicationHash() && record.encryptedTokens);
     return {connected,displayName:connected ? record.displayName : '',connectedAt:connected ? record.connectedAt : null,connectionId:connected ? record.connectionId : null,needsReconnect:Boolean(record && (!connected || record.needsReconnect))};
   }
+  function publicApplicant(applicantId) {
+    const record = getStore().naverApplicants?.[applicantId];
+    if (record?.memberId) return resolveApplicant(applicantId) ? publicConnection(record.memberId) : {connected:false,displayName:'',connectedAt:null,connectionId:null,needsReconnect:true};
+    const connected = Boolean(record?.connectionId && record.appHash === applicationHash() && record.encryptedTokens);
+    return {connected,displayName:connected ? record.displayName : '',connectedAt:connected ? record.connectedAt : null,connectionId:connected ? record.connectionId : null,needsReconnect:Boolean(record && (!connected || record.needsReconnect))};
+  }
+  function resolveApplicant(applicantId) {
+    const store=getStore(), applicant=store.naverApplicants?.[applicantId];
+    if (!applicant || applicant.id!==applicantId || applicant.appHash!==applicationHash()) return null;
+    if (applicant.memberId) {
+      const connection=store.naverConnections?.[applicant.memberId];
+      if (!connection?.encryptedTokens || connection.appHash!==applicant.appHash || connection.providerIdHash!==applicant.providerIdHash || connection.connectionId!==applicant.connectionId) return null;
+      const user=store.users.find(u=>u.id===applicant.memberId && !u.isAdmin);
+      return user || null;
+    }
+    if (!applicant.connectionId || !applicant.encryptedTokens) return null;
+    return {id:applicantId,username:'',name:applicant.displayName,isAdmin:false,pendingApproval:true};
+  }
   function encrypt(userId, tokens) {
     const iv = crypto.randomBytes(12), cipher = crypto.createCipheriv('aes-256-gcm',key,iv);
     cipher.setAAD(Buffer.from('naver:'+userId));
@@ -52,11 +72,22 @@ function createNaverAuth({ getStore, commit, ApiError, config = {}, fetchImpl = 
   }
   const validToken = token => typeof token === 'string' && token.length > 0 && token.length <= 16384;
   const expiresAt = value => Date.now() + (Number.isInteger(Number(value)) && Number(value)>0 ? Math.min(Number(value),30*86400) : 300)*1000;
-  function cookie(value, origin, maxAge = STATE_AGE/1000) {
-    return `${COOKIE}=${value}; Path=${CALLBACK_PATH}; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${origin.startsWith('https:')?'; Secure':''}`;
+  function cookie(value, origin, maxAge = STATE_AGE/1000, login=false) {
+    return `${login?LOGIN_COOKIE:COOKIE}=${value}; Path=${login?'/api/naver/':CALLBACK_PATH}; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${origin.startsWith('https:')?'; Secure':''}`;
   }
-  function nonceFrom(req) {
-    return (req.headers?.cookie || '').split(';').map(p=>p.trim()).find(p=>p.startsWith(COOKIE+'='))?.slice(COOKIE.length+1) || '';
+  function nonceFrom(req, login=false) {
+    const name=login?LOGIN_COOKIE:COOKIE;
+    return (req.headers?.cookie || '').split(';').map(p=>p.trim()).find(p=>p.startsWith(name+'='))?.slice(name.length+1) || '';
+  }
+  function approvalConnection(applicantId,memberId,expectedConnectionId) {
+    requireConfigured();
+    const store=getStore(), applicant=store.naverApplicants?.[applicantId];
+    const member=store.users.find(u=>u.id===memberId && !u.isAdmin);
+    if (!member || !store.members?.some(m=>m.id===memberId) || !applicant || applicant.memberId || applicant.appHash!==applicationHash() || applicant.connectionId!==expectedConnectionId || !applicant.encryptedTokens || applicant.needsReconnect) throw new ApiError(409,'연결 요청이나 회원 정보가 변경됐어요. 다시 확인해주세요.');
+    if (store.naverConnections?.[memberId] || Object.values(store.naverConnections || {}).some(c=>c.appHash===applicationHash() && c.providerIdHash===applicant.providerIdHash)) throw new ApiError(409,'이미 연결된 회원이나 네이버 계정입니다. 현재 연결을 먼저 확인해주세요.');
+    requireNoPublication(memberId);
+    let tokens; try { tokens=decrypt(applicantId,applicant.encryptedTokens); } catch { throw new ApiError(409,'회원이 네이버에 다시 로그인해야 합니다.'); }
+    return {connectionId:applicant.connectionId,providerIdHash:applicant.providerIdHash,appHash:applicant.appHash,displayName:applicant.displayName,connectedAt:applicant.connectedAt,needsReconnect:false,encryptedTokens:encrypt(memberId,tokens),expiresAt:applicant.expiresAt};
   }
   async function jsonRequest(url, options) {
     let response;
@@ -108,6 +139,7 @@ function createNaverAuth({ getStore, commit, ApiError, config = {}, fetchImpl = 
     const current=getStore(), state=crypto.randomBytes(32).toString('hex'), nonce=crypto.randomBytes(32).toString('hex');
     const revision=(current.naverLinkRevisions?.[session.user.id] || 0)+1;
     const pending=Object.fromEntries(Object.entries(current.naverOAuthStates || {}).filter(([,s])=>s.expiresAt>Date.now() && s.userId !== session.user.id));
+    if (Object.keys(pending).length>=MAX_OAUTH_STATES) throw new ApiError(429,'네이버 로그인 요청이 많습니다. 잠시 후 다시 시도해주세요.');
     pending[hash(state)]={userId:session.user.id,sessionHash:hash(session.token),nonceHash:hash(nonce),origin,expiresAt:Date.now()+STATE_AGE,revision};
     await commit({...current,naverOAuthStates:pending,naverLinkRevisions:{...current.naverLinkRevisions,[session.user.id]:revision}});
     res.setHeader('Set-Cookie',cookie(nonce,origin));
@@ -115,14 +147,51 @@ function createNaverAuth({ getStore, commit, ApiError, config = {}, fetchImpl = 
     url.search=new URLSearchParams({response_type:'code',client_id:config.clientId,redirect_uri:callbackURL.href,state}).toString();
     return {authorizeUrl:url.href};
   }
+  async function startLogin(req,res,origin) {
+    requireConfigured(origin);
+    if (typeof establishSession!=='function') throw new ApiError(503,'네이버 로그인 설정을 확인해주세요.');
+    const oldNonce=nonceFrom(req,true), current=getStore(), state=crypto.randomBytes(32).toString('hex'), nonce='login_'+crypto.randomBytes(32).toString('hex');
+    const pending=Object.fromEntries(Object.entries(current.naverOAuthStates || {}).filter(([,s])=>s.expiresAt>Date.now() && !(s.mode==='login' && oldNonce && s.nonceHash===hash(oldNonce))));
+    if (Object.keys(pending).length>=MAX_OAUTH_STATES) throw new ApiError(429,'네이버 로그인 요청이 많습니다. 잠시 후 다시 시도해주세요.');
+    pending[hash(state)]={mode:'login',nonceHash:hash(nonce),origin,expiresAt:Date.now()+STATE_AGE};
+    await commit({...current,naverOAuthStates:pending});
+    res.setHeader('Set-Cookie',cookie(nonce,origin,STATE_AGE/1000,true));
+    const url=new URL('https://nid.naver.com/oauth2.0/authorize');
+    url.search=new URLSearchParams({response_type:'code',client_id:config.clientId,redirect_uri:callbackURL.href,state}).toString();
+    return {authorizeUrl:url.href};
+  }
+  async function signInIdentity(profile,token) {
+    const current=getStore(), providerIdHash=crypto.createHmac('sha256',key).update('naver:'+profile.id).digest('hex');
+    const appHash=applicationHash(), displayName=String(profile.nickname || profile.name || '네이버 회원').slice(0,80);
+    const linked=Object.entries(current.naverConnections || {}).filter(([,c])=>c.providerIdHash===providerIdHash && c.appHash===appHash);
+    if (linked.length>1) throw new ApiError(409,'네이버 계정 연결 정보를 관리자에게 확인해주세요.');
+    const tokens={accessToken:token.access_token,refreshToken:token.refresh_token};
+    if (linked.length) {
+      const [memberId,record]=linked[0], member=current.users.find(u=>u.id===memberId && !u.isAdmin);
+      if (!member || !current.members?.some(m=>m.id===memberId)) throw new ApiError(409,'연결된 회원 정보를 확인해주세요.');
+      requireNoPublication(memberId);
+      const identity={connectionId:record.connectionId,providerIdHash,appHash};
+      await commit({...current,naverConnections:{...current.naverConnections,[memberId]:{...record,displayName,needsReconnect:false,encryptedTokens:encrypt(memberId,tokens),expiresAt:expiresAt(token.expires_in)}}});
+      return {userId:memberId,identity};
+    }
+    const applicants=Object.values(current.naverApplicants || {}).filter(a=>!a.memberId && a.providerIdHash===providerIdHash && a.appHash===appHash);
+    if (applicants.length>1) throw new ApiError(409,'네이버 로그인 요청 정보를 관리자에게 확인해주세요.');
+    const existing=applicants[0], id=existing?.id || 'na_'+crypto.randomUUID();
+    const applicant={...existing,id,providerIdHash,appHash,displayName,connectionId:existing?.connectionId || crypto.randomUUID(),connectedAt:existing?.connectedAt || new Date().toISOString(),needsReconnect:false,encryptedTokens:encrypt(id,tokens),expiresAt:expiresAt(token.expires_in),memberId:null};
+    const identity={connectionId:applicant.connectionId,providerIdHash,appHash};
+    await commit({...current,naverApplicants:{...current.naverApplicants,[id]:applicant}});
+    return {userId:id,identity};
+  }
   async function callback(req,res,url,origin) {
-    let success=false;
+    let success=false, loginMode=Boolean(nonceFrom(req,true));
     try {
       requireConfigured(origin);
       const state=url.searchParams.get('state') || '', code=url.searchParams.get('code') || '';
-      const nonce=nonceFrom(req), current=getStore(), stateKey=hash(state), pending=current.naverOAuthStates?.[stateKey];
-      if (!/^[a-f0-9]{64}$/.test(state) || !/^[a-f0-9]{64}$/.test(nonce) || !pending || pending.expiresAt<=Date.now() || pending.origin!==origin || pending.nonceHash!==hash(nonce) || !isSessionActive(pending.userId,pending.sessionHash)) throw new ApiError(403,'네이버 연결 요청이 만료되었거나 일치하지 않습니다.');
-      if ((current.naverLinkRevisions?.[pending.userId] || 0)!==pending.revision) throw new ApiError(409,'네이버 연결 요청이 변경되었습니다.');
+      const current=getStore(), stateKey=hash(state), pending=current.naverOAuthStates?.[stateKey];
+      if (pending) loginMode=pending.mode==='login';
+      const nonce=nonceFrom(req,loginMode), validNonce=loginMode?/^login_[a-f0-9]{64}$/.test(nonce):/^[a-f0-9]{64}$/.test(nonce);
+      if (!/^[a-f0-9]{64}$/.test(state) || !validNonce || !pending || pending.expiresAt<=Date.now() || pending.origin!==origin || pending.nonceHash!==hash(nonce) || (!loginMode && !isSessionActive(pending.userId,pending.sessionHash))) throw new ApiError(403,'네이버 연결 요청이 만료되었거나 일치하지 않습니다.');
+      if (!loginMode && (current.naverLinkRevisions?.[pending.userId] || 0)!==pending.revision) throw new ApiError(409,'네이버 연결 요청이 변경되었습니다.');
       const remaining={...current.naverOAuthStates};delete remaining[stateKey];
       await commit({...current,naverOAuthStates:remaining});
       if (url.searchParams.has('error') || !code || code.length>4096) throw new ApiError(403,'네이버 연결을 완료하지 못했습니다.');
@@ -130,17 +199,25 @@ function createNaverAuth({ getStore, commit, ApiError, config = {}, fetchImpl = 
       if (!validToken(token.access_token) || !validToken(token.refresh_token) || (token.token_type && (typeof token.token_type !== 'string' || token.token_type.toLowerCase() !== 'bearer'))) throw new ApiError(502,'네이버 인증 응답을 확인하지 못했습니다.');
       const profile=await jsonRequest(PROFILE_URL,{headers:{Authorization:'Bearer '+token.access_token}});
       if (profile.resultcode!=='00' || !object(profile.response) || typeof profile.response.id!=='string' || !profile.response.id || profile.response.id.length>512) throw new ApiError(502,'네이버 회원을 확인하지 못했습니다.');
-      requireNoPublication(pending.userId);
-      const latest=getStore();
-      if ((latest.naverLinkRevisions?.[pending.userId] || 0)!==pending.revision || !isSessionActive(pending.userId,pending.sessionHash)) throw new ApiError(409,'네이버 연결 요청이 변경되었습니다.');
-      const providerIdHash=crypto.createHmac('sha256',key).update('naver:'+profile.response.id).digest('hex');
-      if (Object.entries(latest.naverConnections || {}).some(([id,c])=>id!==pending.userId && c.providerIdHash===providerIdHash && c.appHash===applicationHash())) throw new ApiError(409,'이미 다른 회원에게 연결된 네이버 계정입니다.');
-      const displayName=String(profile.response.nickname || profile.response.name || '네이버 회원').slice(0,80);
-      const record={connectionId:crypto.randomUUID(),providerIdHash,appHash:applicationHash(),displayName,connectedAt:new Date().toISOString(),needsReconnect:false,encryptedTokens:encrypt(pending.userId,{accessToken:token.access_token,refreshToken:token.refresh_token}),expiresAt:expiresAt(token.expires_in)};
-      await commit({...latest,naverConnections:{...latest.naverConnections,[pending.userId]:record}});
+      if (loginMode) {
+        if (typeof establishSession!=='function') throw new ApiError(503,'네이버 로그인 설정을 확인해주세요.');
+        const signedIn=await signInIdentity(profile.response,token);
+        await establishSession(signedIn.userId,req,res,signedIn.identity);
+      } else {
+        requireNoPublication(pending.userId);
+        const latest=getStore();
+        if ((latest.naverLinkRevisions?.[pending.userId] || 0)!==pending.revision || !isSessionActive(pending.userId,pending.sessionHash)) throw new ApiError(409,'네이버 연결 요청이 변경되었습니다.');
+        const providerIdHash=crypto.createHmac('sha256',key).update('naver:'+profile.response.id).digest('hex');
+        if (Object.entries(latest.naverConnections || {}).some(([id,c])=>id!==pending.userId && c.providerIdHash===providerIdHash && c.appHash===applicationHash())) throw new ApiError(409,'이미 다른 회원에게 연결된 네이버 계정입니다.');
+        const displayName=String(profile.response.nickname || profile.response.name || '네이버 회원').slice(0,80);
+        const record={connectionId:crypto.randomUUID(),providerIdHash,appHash:applicationHash(),displayName,connectedAt:new Date().toISOString(),needsReconnect:false,encryptedTokens:encrypt(pending.userId,{accessToken:token.access_token,refreshToken:token.refresh_token}),expiresAt:expiresAt(token.expires_in)};
+        await commit({...latest,naverConnections:{...latest.naverConnections,[pending.userId]:record}});
+      }
       success=true;
     } catch { /* Keep OAuth codes, access tokens and provider errors out of URLs and logs. */ }
-    res.writeHead(303,{'Location':success?'/#settings/naver-success':'/#settings/naver-error','Cache-Control':'no-store','Referrer-Policy':'no-referrer','Set-Cookie':cookie('',origin,0)});res.end();
+    const previous=res.getHeader?.('Set-Cookie'), cookies=previous?(Array.isArray(previous)?previous:[previous]):[];
+    cookies.push(cookie('',origin,0,loginMode));
+    res.writeHead(303,{'Location':loginMode?(success?'/#connect':'/#naver-login-error'):(success?'/#settings/naver-success':'/#settings/naver-error'),'Cache-Control':'no-store','Referrer-Policy':'no-referrer','Set-Cookie':cookies.length===1?cookies[0]:cookies});res.end();
   }
   async function disconnect(userId) {
     requireNoPublication(userId);
@@ -165,6 +242,16 @@ function createNaverAuth({ getStore, commit, ApiError, config = {}, fetchImpl = 
     }
     return false;
   }
-  return {configuration,publicConnection,accessToken,handle,callback};
+  async function publicHandle(req,res,url,readJson,send,origin,session) {
+    if (url.pathname==='/api/naver/login-config' && req.method==='GET') { send(res,200,{configuration:configuration()});return true; }
+    if (url.pathname==='/api/naver/login' && req.method==='POST') {
+      if (session) throw new ApiError(409,'현재 계정에서 로그아웃한 뒤 네이버로 로그인해주세요.');
+      if (req.headers?.origin!==origin || req.headers?.['sec-fetch-site']==='cross-site' || !/^application\/json(?:\s*;|$)/i.test(req.headers?.['content-type'] || '')) throw new ApiError(403,'앱의 로그인 화면에서 다시 시도해주세요.');
+      const body=await readJson(req);if(!object(body)||Object.keys(body).length)throw new ApiError(422,'로그인 요청을 확인해주세요.');
+      send(res,200,await startLogin(req,res,origin));return true;
+    }
+    return false;
+  }
+  return {configuration,publicConnection,publicApplicant,resolveApplicant,approvalConnection,accessToken,handle,publicHandle,callback};
 }
 module.exports={createNaverAuth};

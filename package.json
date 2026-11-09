@@ -5,7 +5,7 @@
   "description": "크로스핏 존다 8주 프로그램 · 로그인과 팀 역할 관리",
   "scripts": {
     "start": "node --env-file-if-exists=.env.local server.js",
-    "check": "node --check app.js && node --check admin.js && node --check meals.js && node --check server.js && node --check meals-server.js && node --check cloud-storage.js && node --check api/handler.js && node --check meal-summary.js && node --check cafe-draft.js && node --check naver-auth.js && node --check naver-cafe.js && node --check naver-ui.js && node --check icons.js",
+    "check": "node --check app.js && node --check admin.js && node --check meals.js && node --check server.js && node --check meals-server.js && node --check cloud-storage.js && node --check api/handler.js && node --check meal-summary.js && node --check cafe-draft.js && node --check naver-auth.js && node --check naver-cafe.js && node --check naver-onboarding.js && node --check naver-ui.js",
     "test": "node --test test/*.test.js",
     "build": "node scripts/build.js"
   },
