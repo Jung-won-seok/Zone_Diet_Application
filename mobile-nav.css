@@ -1,0 +1,203 @@
+/* The desktop sidebar keeps its existing layout. */
+.sidebar .nav-mobile-label,
+.sidebar .mobile-nav-indicator {
+  display: none;
+}
+
+.sidebar .nav-icon {
+  flex-shrink: 0;
+}
+
+.sidebar .nav-icon svg {
+  display: block;
+  width: 22px;
+  height: 22px;
+}
+
+@media (max-width: 580px) {
+  :root {
+    --mobile-nav-height: 72px;
+    --mobile-nav-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    --mobile-nav-clearance: calc(var(--mobile-nav-height) + var(--mobile-nav-bottom) + 16px);
+  }
+
+  body .sidebar {
+    inset: auto auto var(--mobile-nav-bottom) 50%;
+    width: calc(100% - 24px);
+    max-width: 520px;
+    height: var(--mobile-nav-height);
+    padding: 6px;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    gap: 0;
+    border: 1px solid #dfe6d8;
+    border-radius: 999px;
+    background: #fffffb;
+    box-shadow: 0 8px 28px #243d3220, 0 2px 5px #243d3208;
+    isolation: isolate;
+    z-index: 5;
+    touch-action: pan-y pinch-zoom;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  body .sidebar nav {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    flex: 5 1 0;
+    min-width: 0;
+    gap: 0;
+  }
+
+  body.is-admin .sidebar nav {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    flex: 1 1 0;
+  }
+
+  body.is-pending-member .sidebar nav {
+    grid-template-columns: minmax(0, 1fr);
+    flex: 1 1 0;
+  }
+
+  body .sidebar nav a,
+  body .sidebar .settings-link {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-width: 0;
+    min-height: 44px;
+    margin: 0;
+    padding: 6px 2px;
+    border-radius: 999px;
+    background: transparent;
+    color: #707c74;
+    font-size: 10px;
+    font-weight: 500;
+    line-height: 1.2;
+    text-align: center;
+    white-space: nowrap;
+    cursor: pointer;
+    touch-action: pan-y pinch-zoom;
+    transition: color 160ms ease, background-color 160ms ease;
+  }
+
+  body .sidebar .settings-link {
+    flex: 1 1 0;
+  }
+
+  body.is-pending-member .sidebar nav a {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  body .sidebar .nav-label {
+    display: none;
+  }
+
+  body .sidebar .nav-mobile-label {
+    display: block;
+    max-width: 100%;
+    font-size: 10px;
+    line-height: 1.2;
+    letter-spacing: -.045em;
+  }
+
+  body .sidebar .nav-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    font-size: 22px;
+    line-height: 1;
+  }
+
+  body .sidebar nav a.active,
+  body .sidebar .settings-link.active {
+    background: #e7f0da;
+    color: var(--green);
+    font-weight: 700;
+  }
+
+  body .sidebar.has-nav-indicator .mobile-nav-indicator {
+    display: block;
+    position: absolute;
+    top: 6px;
+    bottom: 6px;
+    left: 0;
+    width: var(--nav-indicator-width, 0px);
+    transform: translate3d(var(--nav-indicator-x, 0px), 0, 0);
+    border-radius: 999px;
+    background: #e7f0da;
+    pointer-events: none;
+    z-index: 0;
+    transition: transform 220ms cubic-bezier(.2, .8, .2, 1), width 220ms ease;
+  }
+
+  body .sidebar.has-nav-indicator nav a.active,
+  body .sidebar.has-nav-indicator .settings-link.active {
+    background: transparent;
+  }
+
+  body .sidebar.is-dragging .mobile-nav-indicator {
+    transition: none;
+  }
+
+  body .sidebar.is-dragging nav a,
+  body .sidebar.is-dragging .settings-link {
+    color: #707c74;
+    cursor: grabbing;
+  }
+
+  body .sidebar.is-dragging nav a.drag-preview,
+  body .sidebar.is-dragging .settings-link.drag-preview {
+    color: var(--green);
+    font-weight: 700;
+  }
+
+  body .sidebar nav a:focus-visible,
+  body .sidebar .settings-link:focus-visible {
+    outline: 2px solid var(--green);
+    outline-offset: -3px;
+  }
+
+  #app {
+    touch-action: pan-y pinch-zoom;
+  }
+
+  html {
+    scroll-padding-bottom: var(--mobile-nav-clearance);
+  }
+
+  body main > footer {
+    margin-bottom: var(--mobile-nav-clearance);
+  }
+
+  body .save-bar,
+  body .naver-save-bar {
+    bottom: var(--mobile-nav-clearance);
+  }
+
+  body #toast {
+    bottom: var(--mobile-nav-clearance);
+  }
+
+  body.logged-out #toast {
+    bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (max-width: 580px) and (prefers-reduced-motion: reduce) {
+  body .sidebar.has-nav-indicator .mobile-nav-indicator,
+  body .sidebar nav a,
+  body .sidebar .settings-link {
+    transition: none;
+  }
+}

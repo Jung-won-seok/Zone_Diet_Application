@@ -6,7 +6,38 @@ let bootstrap = null;
 let csrfToken = '';
 let authReady = false;
 let renderedHash = location.hash;
+let navigationPending = false;
+let personalSaved = '';
+let personalSaving = false;
 const app = document.querySelector('#app');
+const mobileNavigation = MobileNavigation.create({
+  root: document.querySelector('.sidebar'),
+  content: app,
+  navigate: href => { if (!navigationPending) location.hash = href; },
+  isBlocked: () => !session || navigationPending || personalSaving || Boolean(document.querySelector('dialog[open]'))
+});
+function personalFormSignature() {
+  const form = document.querySelector('#record-form, #settings-form');
+  return form ? JSON.stringify([...new FormData(form)].filter(([key]) => key !== 'date')) : '';
+}
+function personalIsDirty() { return personalSaving || personalFormSignature() !== personalSaved; }
+function navIcon(page) {
+  const paths = {
+    today: '<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/>',
+    team: '<circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6m2 3a5 5 0 0 1 3 4v3"/>',
+    board: '<rect x="3" y="3" width="18" height="18" rx="4"/><path d="M8 3v18M8 9h13M13 14h4m-4 3h4"/>',
+    record: '<rect x="4" y="3" width="16" height="18" rx="4"/><path d="M12 8v8m-4-4h8"/>',
+    progress: '<path d="M4 4v16h16M8 15l4-5 4 2 4-7"/>',
+    settings: '<path d="M9.5 4 10 2h4l.5 2 2 1.2 2-.6 2 3.4-1.5 1.5v3l1.5 1.5-2 3.4-2-.6-2 1.2-.5 2h-4l-.5-2-2-1.2-2 .6-2-3.4L5 12.5v-3L3.5 8l2-3.4 2 .6Z"/><circle cx="12" cy="11" r="3"/>',
+    admin: '<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',
+    accounts: '<circle cx="12" cy="7" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/>',
+    naver: '<path d="m10 13 4-4m-7 2-2 2a4.2 4.2 0 0 0 6 6l2-2m-2-10 2-2a4.2 4.2 0 0 1 6 6l-2 2"/>'
+  };
+  return `<span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths[page] || paths.naver}</svg></span>`;
+}
+function navLabel(page, label, mobileLabel) {
+  return `${navIcon(page)}<span class="nav-label">${label}</span><span class="nav-mobile-label">${mobileLabel}</span>`;
+}
 const todayKey = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const dateLabel = key => new Date(`${key}T12:00:00`).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' });
@@ -39,12 +70,18 @@ function loginView(error = '') {
 function renderShell() {
   document.body.classList.toggle('is-admin', session.isAdmin);
   document.body.classList.toggle('is-pending-member', Boolean(session.pendingApproval));
-  const routes = session.pendingApproval ? [['connect','N','카페 연동 신청']] : session.isAdmin ? [['admin','▦','팀 · 역할 관리'], ['accounts','◫','회원 계정'], ['naver','N','네이버 카페 연결'], ['board','▧','전체 식단']] : [['today','◫','오늘'],['team','♧','우리 팀'],['board','▧','전체 식단'],['record','＋','기록'],['progress','↗','변화']];
-  document.querySelector('.sidebar nav').innerHTML = routes.map(([id,icon,label]) => `<a href="#${id}" data-page="${id}"><span class="nav-icon">${icon}</span>${label}</a>`).join('');
+  const routes = session.pendingApproval ? [['connect','카페 연동 신청','카페 연동']] : session.isAdmin ? [['admin','팀 · 역할 관리','팀 관리'], ['accounts','회원 계정','회원'], ['naver','네이버 카페 연결','카페 연결'], ['board','전체 식단','전체 식단']] : [['today','오늘의 현황','오늘'],['team','우리 팀','우리 팀'],['board','전체 식단','전체 식단'],['record','데일리 기록','기록'],['progress','나의 변화','변화']];
+  document.querySelector('.sidebar nav').innerHTML = routes.map(([id,label,mobileLabel]) => `<a href="#${id}" data-page="${id}" aria-label="${label}" draggable="false">${navLabel(id,label,mobileLabel)}</a>`).join('');
+  const settingsLink = document.querySelector('.settings-link');
+  settingsLink.innerHTML = navLabel('settings','프로그램 설정','설정');
+  settingsLink.setAttribute('aria-label','프로그램 설정');
+  settingsLink.setAttribute('draggable','false');
   document.querySelector('.program-label').textContent = session.pendingApproval ? '카페 연결 준비' : session.isAdmin ? '관리자 워크스페이스' : bootstrap.program.name;
   document.querySelector('.settings-link').style.display = session.isAdmin || session.pendingApproval ? 'none' : '';
   document.querySelector('.profile').innerHTML = `<span class="avatar">${session.isAdmin ? 'AD' : escapeHTML(session.name.slice(-2))}</span><span>${escapeHTML(session.name)}</span><button id="logout-button" type="button">로그아웃</button>`;
   document.querySelector('#logout-button').addEventListener('click', async () => {
+    if (navigationPending || personalSaving) return;
+    if (personalIsDirty() && !confirm('저장하지 않은 기록을 버리고 로그아웃할까요?')) return;
     if (naverIsDirty() && !confirm('저장하지 않은 카페 연결 설정이 있습니다. 로그아웃할까요?')) return;
     if(mealsHasUnsaved() && !await confirmMealDiscard()) return;
     if (typeof adminIsDirty === 'function' && adminIsDirty() && !confirm('저장하지 않은 팀 편성 변경이 있습니다. 로그아웃할까요?')) return;
@@ -91,6 +128,7 @@ function settingsView() {
 }
 function render() {
   if (!authReady) return;
+  mobileNavigation.cancel();
   cleanupMeals();
   cleanupNaverUI();
   renderedHash = location.hash;
@@ -99,6 +137,7 @@ function render() {
   const loginRoot = document.querySelector('#login-root');
   if (!session) {
     app.innerHTML = ''; document.querySelector('.profile').innerHTML = ''; loginRoot.innerHTML = loginView();
+    personalSaved = ''; mobileNavigation.sync();
     mountNaverLogin();
     document.querySelector('#login-form').addEventListener('submit', async event => {
       event.preventDefault(); const form = event.currentTarget; const button = form.querySelector('button'); const data = new FormData(form); button.disabled = true; button.textContent = '로그인 중…';
@@ -118,6 +157,7 @@ function render() {
   document.querySelector('#page-label').textContent = labels[page];
   document.querySelector('.topbar > span:first-child').firstChild.textContent = session.isAdmin ? 'ADMIN SPACE ' : 'MEMBER SPACE ';
   document.querySelectorAll('[data-page]').forEach(node => { node.classList.toggle('active', node.dataset.page === page); if (node.dataset.page === page) node.setAttribute('aria-current','page'); else node.removeAttribute('aria-current'); });
+  mobileNavigation.sync();
   const validDate = date && /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(`${date}T12:00:00`)) && date <= todayKey();
   app.innerHTML = ({today:todayView,team:()=>mealLoadingView(false),board:()=>mealLoadingView(true),record:()=>recordView(validDate ? date : todayKey()),progress:progressView,settings:settingsView,admin:adminView,accounts:accountsView,naver:naverAdminView,connect:naverOnboardingView})[page]();
   if (page === 'admin') bindAdmin();
@@ -127,34 +167,53 @@ function render() {
   if (page === 'team' || page === 'board') mountMeals(page === 'board', validDate ? date : todayKey());
   document.querySelector('#record-date')?.addEventListener('change', event => { if(event.target.checkValidity()) location.hash = `record/${event.target.value}`; });
   document.querySelector('#record-form')?.addEventListener('submit', async event => {
-    event.preventDefault(); const button = event.currentTarget.querySelector('button[type=submit]'); button.disabled = true;
+    event.preventDefault(); const button = event.currentTarget.querySelector('button[type=submit]'); button.disabled = true; personalSaving = true;
+    const submittedSignature = personalFormSignature();
     const data = new FormData(event.currentTarget), date = data.get('date');
     const record = Object.fromEntries(['weight','breakfast','lunch','dinner','workoutNote'].map(k=>[k,String(data.get(k)||'').trim()])); record.workout = data.get('workout') === 'on';
     const next = {...state, records:{...state.records}}; if(hasRecord(record)) next.records[date] = record; else delete next.records[date];
-    if(await save(next)) toast('기록을 저장했어요. 오늘도 수고했어요!'); button.disabled = false;
+    if(await save(next)) { personalSaved = submittedSignature; toast('기록을 저장했어요. 오늘도 수고했어요!'); } button.disabled = false; personalSaving = false;
   });
   document.querySelector('#settings-form')?.addEventListener('submit', async event => {
-    event.preventDefault(); const button = event.currentTarget.querySelector('button[type=submit]'); button.disabled = true; const data = new FormData(event.currentTarget);
-    if(await save({...state,settings:Object.fromEntries(['name','startWeight','goalWeight'].map(k=>[k,String(data.get(k)||'').trim()]))})) toast('설정을 저장했어요.'); button.disabled = false;
+    event.preventDefault(); const button = event.currentTarget.querySelector('button[type=submit]'); button.disabled = true; personalSaving = true; const data = new FormData(event.currentTarget);
+    const submittedSignature = personalFormSignature();
+    if(await save({...state,settings:Object.fromEntries(['name','startWeight','goalWeight'].map(k=>[k,String(data.get(k)||'').trim()]))})) { personalSaved = submittedSignature; toast('설정을 저장했어요.'); } button.disabled = false; personalSaving = false;
   });
+  personalSaved = personalFormSignature();
   window.scrollTo(0,0);
 }
 window.addEventListener('hashchange', async () => {
-  if (naverIsDirty()) {
-    const nextHash = location.hash; history.replaceState(null, '', renderedHash || location.pathname);
-    if (!confirm('저장하지 않은 카페 연결 설정을 버리고 이동할까요?')) return;
-    history.replaceState(null, '', nextHash || location.pathname);
+  const nextHash = location.hash;
+  if (nextHash === renderedHash) return;
+  const restoreHash = () => history.replaceState(null, '', `${location.pathname}${location.search}${renderedHash}`);
+  if (navigationPending) { restoreHash(); return; }
+  navigationPending = true;
+  mobileNavigation.cancel();
+  try {
+    const hasDraft = personalIsDirty() || naverIsDirty() || mealsHasUnsaved() || adminIsDirty();
+    if (hasDraft) {
+      restoreHash();
+      const recordDate = document.querySelector('#record-date');
+      if (recordDate) recordDate.value = renderedHash.split('/')[1] || todayKey();
+      const mealDate = document.querySelector('#meal-date');
+      if (mealDate && mealPage) mealDate.value = mealPage.date;
+      if (personalSaving) { toast('기록을 저장하고 있어요. 저장이 끝난 뒤 이동해주세요.'); return; }
+      if (personalIsDirty() && !confirm('저장하지 않은 기록을 버리고 이동할까요?')) return;
+      if (naverIsDirty() && !confirm('저장하지 않은 카페 연결 설정을 버리고 이동할까요?')) return;
+      if (mealsHasUnsaved() && !await confirmMealDiscard()) return;
+      if (adminIsDirty()) {
+        if (!confirm('저장하지 않은 팀 편성 변경을 버리고 이동할까요?')) return;
+        resetAdminDraft();
+      }
+      history.replaceState(null, '', `${location.pathname}${location.search}${nextHash}`);
+    }
+    render();
+  } finally {
+    navigationPending = false;
+    mobileNavigation.sync();
   }
-  if(mealsHasUnsaved()) {
-    const nextHash=location.hash;
-    history.replaceState(null, '', renderedHash || location.pathname);
-    const dateInput=document.querySelector('#meal-date');if(dateInput)dateInput.value=mealPage.date;
-    if(!await confirmMealDiscard())return;
-    history.replaceState(null, '', nextHash || location.pathname);
-  }
-  render();
 });
-window.addEventListener('beforeunload', event => { if(adminIsDirty() || mealsHasUnsaved() || naverIsDirty()) { event.preventDefault(); event.returnValue = ''; } });
+window.addEventListener('beforeunload', event => { if(adminIsDirty() || mealsHasUnsaved() || naverIsDirty() || personalIsDirty()) { event.preventDefault(); event.returnValue = ''; } });
 (async () => {
   try { const result = await api('/api/session'); session = result.user; csrfToken = result.csrfToken || ''; if(session) await loadBootstrap(); }
   catch(error) { session = null; toast('서버에 연결하지 못했습니다. 잠시 후 새로고침해주세요.'); }
