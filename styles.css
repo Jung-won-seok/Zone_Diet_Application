@@ -6,3 +6,35 @@
 @media(max-width:1100px){.sidebar{width:210px;padding:30px 18px}main{margin-left:210px;padding:0 28px}.brand{font-size:12px}.columns{gap:16px}.card{padding:20px}.hero{padding:26px}.hero-art{width:140px}#toast{left:calc(50% + 105px)}}
 @media(max-width:800px){.sidebar{width:180px;padding:28px 14px}.brand{font-size:10px;gap:6px}.brand small{font-size:6px}.brand-mark{width:31px;height:36px}.program-label{font-size:10px;margin-left:7px}.sidebar nav a{font-size:12px;padding:12px 9px;gap:9px}.sidebar-note{padding:15px}.sidebar-note p{font-size:15px}.tiny-label{font-size:8px}main{margin-left:180px;padding:0 24px}.columns,.form-layout{grid-template-columns:1fr}.hero-art{width:110px}.hero-art:before,.hero-art:after{display:none}.hero h2{font-size:22px}.stat{padding:16px}.stat-value{font-size:25px}.stats{gap:10px}.date-tag{font-size:10px;padding:8px}.profile{font-size:0}.profile .avatar{font-size:9px}h1{font-size:27px}#toast{left:calc(50% + 90px)}}
 @media(max-width:580px){.sidebar{inset:auto 0 0;width:100%;height:72px;padding:6px 12px calc(6px + env(safe-area-inset-bottom));border-right:0;border-top:1px solid var(--line);z-index:5;display:flex;flex-direction:row;align-items:stretch;height:calc(72px + env(safe-area-inset-bottom))}.sidebar>.brand,.program-label,.sidebar-note,.local-label{display:none}.sidebar nav{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;flex:3}.sidebar nav a,.settings-link{display:flex;flex-direction:column;justify-content:center;gap:4px;font-size:10px;padding:6px 0;margin:0;border-radius:10px}.nav-icon{font-size:21px;text-align:center}.settings-link{flex:1;font-size:20px}.settings-link span{font-size:10px}main{margin:0;padding:0 20px}.topbar{height:65px;font-size:8px}.topbar #page-label{font-size:10px}.divider{margin:0 9px}#app{padding:26px 0 28px;min-height:calc(100vh - 190px)}.page-heading{align-items:start;margin-bottom:22px}.page-heading .date-tag{font-size:9px;padding:8px;margin-top:25px}h1{font-size:27px}.subtitle{font-size:11px;max-width:240px}.hero{padding:24px;gap:10px;border-radius:17px}.hero h2{font-size:21px}.hero p{font-size:10px;max-width:210px}.hero-art{width:62px}.hero-number{font-size:43px}.hero-number span{font-size:15px}.hero-art small{font-size:8px}.hero .button{padding:10px 14px;font-size:11px;margin-top:20px}.stats{gap:8px;margin-bottom:22px}.stat{padding:15px 11px;border-radius:13px}.stat-label{font-size:10px}.stat-label span:last-child{display:none}.stat-value{font-size:25px;margin:14px 0 8px}.stat-value small{font-size:9px;margin-left:3px}.stat-note{font-size:9px;line-height:1.6}.card{padding:21px;border-radius:16px}.card-heading h2{font-size:16px}.columns{gap:18px}.field-row{gap:12px}.history-row{font-size:10px}.history-row.header{font-size:10px}footer{margin-bottom:calc(72px + env(safe-area-inset-bottom));font-size:8px;gap:8px;flex-wrap:wrap;padding:16px 0;min-height:64px}.prototype{display:none}#toast{left:50%;bottom:calc(88px + env(safe-area-inset-bottom));font-size:12px}}
+/* Keep mobile text sizing stable without restricting pinch-to-zoom. */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body .login-shell{min-height:100svh}
+
+@media(max-width:1000px),(any-pointer:coarse){
+  /* iOS zooms focused controls below 16px. Keep this floor across component styles. */
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=hidden]):not([type=file]):not([type=button]):not([type=submit]):not([type=reset]),
+  select,textarea{
+    font-size:max(16px,1rem)!important;
+    min-width:0;
+    max-width:100%;
+  }
+}
+
+@media(max-width:580px){
+  main,#app,.login-panel,.field,.form-stack,.upload-fields{min-width:0}
+  .field-row{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .page-heading{flex-wrap:wrap}
+  .page-heading>div{min-width:0}
+  .page-heading .date-tag{margin-top:0}
+  .meal-date-bar,.meal-date-bar>div{flex-wrap:wrap}
+  .meal-date-bar>div{min-width:0}
+  body .meal-date-bar input{width:10.5rem;max-width:100%}
+  .topbar>span:first-child{min-width:0}
+  .sidebar nav{min-width:0}
+  body.is-admin .sidebar nav{grid-template-columns:repeat(4,minmax(0,1fr))}
+  #app{min-height:calc(100svh - 190px)}
+  body .meal-dialog{max-height:calc(100dvh - 24px);max-width:calc(100% - 20px)}
+}
+@media(max-width:380px){
+  .field-row{grid-template-columns:1fr}
+}
