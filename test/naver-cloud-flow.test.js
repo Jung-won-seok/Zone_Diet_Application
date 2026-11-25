@@ -71,8 +71,8 @@ function cloudFixture() {
         return new URL(response.data.authorizeUrl).searchParams.get('state');
       },
       finish(state,person='alice') {return this.request('/api/naver/callback?'+new URLSearchParams({state,code:person}),'GET',undefined,{origin:false});},
-      async signIn(person='alice') {
-        const response=await this.finish(await this.start(),person);assert.equal(response.headers.location,'/#connect',response.raw);
+      async signIn(person='alice', destination='/#connect') {
+        const response=await this.finish(await this.start(),person);assert.equal(response.headers.location,destination,response.raw);
         return this.request('/api/bootstrap');
       },
       async adminLogin() {
@@ -116,7 +116,7 @@ test('Naver cloud login and approval survive a new server instance for every req
   assert.doesNotMatch(JSON.stringify(h.store),/private-cloud-access-|private-cloud-refresh-|private-cloud-provider-|cloud-test-client-secret/);
   assert.doesNotMatch(boot.raw+queue.raw+reviewed.raw+onboard.raw,/encryptedTokens|providerIdHash|private-cloud-/);
   assert.equal((await member.request('/api/logout','POST',{})).status,200);
-  const returning=await member.signIn();assert.equal(returning.data.user.id,'u01');assert.equal((await member.request('/api/naver/onboarding')).data.approved,true);
+  const returning=await member.signIn('alice','/#reservations');assert.equal(returning.data.user.id,'u01');assert.equal((await member.request('/api/naver/onboarding')).data.approved,true);
   assert.equal(h.store.naverConnections.u01.connectionId,connectionId);assert.equal(Object.keys(h.store.naverApplicants).length,1);
   assert.equal((await member.request('/api/naver/disconnect','POST',{})).status,200);
   assert.equal((await member.request('/api/session')).data.user,null);

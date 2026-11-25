@@ -6,9 +6,14 @@ const { createMealService } = require('./meals-server');
 const { createNaverAuth } = require('./naver-auth');
 const { createNaverCafe } = require('./naver-cafe');
 const { createNaverOnboarding } = require('./naver-onboarding');
+const { createReservationService } = require('./reservations-server');
+const { createBoxMemberService } = require('./members-server');
+const publicAssets = require('./public-assets');
 const CORE_ROLES = ['diet', 'leader', 'mission', 'sns'];
 const SESSION_AGE = 8 * 60 * 60 * 1000;
-const STATIC = { '/mobile-nav.js': ['mobile-nav.js','text/javascript'], '/mobile-nav.css': ['mobile-nav.css','text/css'], '/naver-ui.js': ['naver-ui.js','text/javascript'], '/naver-ui.css': ['naver-ui.css','text/css'], '/meal-summary.js': ['meal-summary.js','text/javascript'], '/cafe-draft.js': ['cafe-draft.js','text/javascript'], '/cafe-draft.css': ['cafe-draft.css','text/css'], '/': ['index.html','text/html'], '/index.html': ['index.html','text/html'], '/styles.css': ['styles.css','text/css'], '/app.js': ['app.js','text/javascript'], '/admin.js': ['admin.js','text/javascript'], '/admin.css': ['admin.css','text/css'], '/meals.js': ['meals.js','text/javascript'], '/meals.css': ['meals.css','text/css'] };
+const assetTypes = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
+const STATIC = new Map(publicAssets.map(file => ['/' + file, [file, assetTypes[path.extname(file)]]]));
+STATIC.set('/', STATIC.get('/index.html'));
 class ApiError extends Error { constructor(status, message) { super(message); this.status = status; } }
 const fail = (condition, message) => { if (!condition) throw new ApiError(422, message); };
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -19,10 +24,10 @@ function makeUser(id, username, name, password, isAdmin = false) {
 }
 const blankPersonal = (name = '') => ({ settings: { name, startWeight: '', goalWeight: '' }, records: {} });
 const publicUser = user => ({ id: user.id, username: user.username, name: user.name, isAdmin: user.isAdmin, ...(user.pendingApproval ? {pendingApproval:true} : {}) });
-function seedStore(passwords = {}) {
+function seedStore(passwords = {}, { demoMembers = true } = {}) {
   const names = ['김민준','이서연','박지훈','최수빈','정도윤','강하은','조현우','윤지우','장준서','임서윤','한시우','오지민','서예준','신채원','권도현','황민서','안건우','송수아','류정우','홍예린'];
   const users = [makeUser('admin', 'admin', '존다 관리자', passwords.admin || 'ZondaAdmin!Demo27', true)], members = [], personal = {};
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < (demoMembers ? names.length : 0); i++) {
     const num = String(i + 1).padStart(2, '0'), id = `u${num}`;
     users.push(makeUser(id, `member${num}`, names[i], passwords[`member${num}`] || `Zonda${num}!Demo`));
     members.push({ id, teamId: `t${Math.floor(i / 4) + 1}`, role: CORE_ROLES[i % 4], customRole: '' });
@@ -61,7 +66,7 @@ function validateAssignments(body, store) {
   fail(object(body) && Number.isInteger(body.revision) && Array.isArray(body.members), '팀 배정 형식이 올바르지 않습니다.');
   if (body.revision !== store.revision) throw new ApiError(409, '다른 창에서 팀 배정이 변경되었습니다. 최신 현황을 불러온 뒤 다시 저장해주세요.');
   const ids = new Set(store.members.map(m => m.id)), seen = new Set();
-  fail(body.members.length === ids.size, '모든 회원의 팀 배정을 함께 저장해주세요.');
+  fail(body.members.length === ids.size, '존다 참가자 전체의 팀 배정을 함께 저장해주세요.');
   const teams = new Map(store.teams.map(t => [t.id, { count: 0, roles: new Set() }]));
   return body.members.map(row => {
     fail(object(row) && ids.has(row.id) && !seen.has(row.id), '중복되거나 알 수 없는 회원이 있습니다.'); seen.add(row.id);
@@ -100,6 +105,8 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
     else { persist(next); store = next; }
   }
   const meals = createMealService({ getStore: () => store, commit, mediaDir: path.join(dataDir, 'media'), mediaStorage, ApiError });
+  const reservations = createReservationService({ getStore: () => store, commit, ApiError });
+  const boxMembers = createBoxMemberService({ getStore: () => store, commit, ApiError, makeUser, blankPersonal });
   const sessions = new Map(cloud ? Object.entries(store.authState?.sessions || {}) : []);
   const failures = new Map(cloud ? Object.entries(store.authState?.failures || {}) : []);
   async function persistAuth() {
@@ -144,10 +151,14 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
     return { ...s, token, originUserId:s.userId, user };
   }
   function bootstrap(s) {
-    if(s.user.pendingApproval)return {user:publicUser(s.user),csrfToken:s.csrfToken,program:store.program,teams:[],members:[],personal:blankPersonal(s.user.name),personalRevision:0,photoMealCounts:{},revision:0,onboarding:naverOnboarding.state(s)};
     const own = store.members.find(m => m.id === s.user.id);
+    const account = { user: publicUser(s.user), csrfToken: s.csrfToken, zondaParticipant: Boolean(own) };
+    if (!own && !s.user.isAdmin) {
+      return { ...account, program: s.user.pendingApproval ? store.program : null, teams: [], members: [], personal: null,
+        personalRevision: 0, photoMealCounts: {}, revision: 0, ...(s.user.pendingApproval ? { onboarding: naverOnboarding.state(s) } : {}) };
+    }
     const members = store.members.filter(m => s.user.isAdmin || m.id === s.user.id || (own?.teamId && m.teamId === own.teamId));
-    return { user: publicUser(s.user), csrfToken: s.csrfToken, program: store.program, teams: store.teams, members: members.map(m => { const u = store.users.find(u => u.id === m.id); return { id: u.id, username: u.username, name: u.name, teamId: m.teamId, role: m.role, customRole: m.customRole }; }), personal: s.user.isAdmin ? blankPersonal() : store.personal[s.user.id], personalRevision: store.personalRevisions[s.user.id] || 0, photoMealCounts: meals.photoMealCounts(s.user), revision: store.revision };
+    return { ...account, program: store.program, teams: store.teams, members: members.map(m => { const u = store.users.find(u => u.id === m.id); return { id: u.id, username: u.username, name: u.name, teamId: m.teamId, role: m.role, customRole: m.customRole }; }), personal: s.user.isAdmin ? blankPersonal() : store.personal[s.user.id], personalRevision: store.personalRevisions[s.user.id] || 0, photoMealCounts: meals.photoMealCounts(s.user), revision: store.revision };
   }
   function send(res,status,data,extra = {}) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...extra }); res.end(JSON.stringify(data)); }
   async function readJson(req, limit = 1024 * 1024) {
@@ -219,11 +230,17 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
         };
         if (route === '/api/logout' && req.method === 'POST') { sessions.delete(session.token); await persistAuth(); send(res,200,{ok:true},{'Set-Cookie':sessionCookie('',0)}); return; }
         if (route === '/api/bootstrap' && req.method === 'GET') { send(res,200,bootstrap(session)); return; }
-        if (await naverOnboarding.handle(req,res,session,url,readAuthenticatedJson,send)) return;
         if(session.user.pendingApproval) {
+          if (await naverOnboarding.handle(req,res,session,url,readAuthenticatedJson,send)) return;
           if(route==='/api/naver/status'&&req.method==='GET'){const state=naverOnboarding.state(session);send(res,200,{configuration:state.configuration,connection:state.connection});return;}
           throw new ApiError(403,'카페 연동 신청 후 관리자가 회원과 게시판을 연결하면 이용할 수 있습니다.');
         }
+        if (await reservations.handle(req,res,session,url,readAuthenticatedJson,send)) return;
+        if (await boxMembers.handle(req,res,session,url,readAuthenticatedJson,send)) return;
+        if (!session.user.isAdmin && !store.members.some(member => member.id === session.user.id)) {
+          throw new ApiError(403, '존다 참가자로 등록된 회원만 이용할 수 있습니다.');
+        }
+        if (await naverOnboarding.handle(req,res,session,url,readAuthenticatedJson,send)) return;
         if (await naverAuth.handle(req, res, session, url, readAuthenticatedJson, send, origin)) return;
         if (await naverCafe.handle(req, res, session, url, readAuthenticatedJson, send)) return;
         if (await meals.handle(req, res, session, url, readAuthenticatedJson, send)) return;
@@ -243,14 +260,15 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
         }
         throw new ApiError(404,'요청한 기능을 찾을 수 없습니다.');
       }
-      const entry = STATIC[route];
+      const entry = STATIC.get(route);
       if (!entry || !['GET','HEAD'].includes(req.method)) throw new ApiError(404,'페이지를 찾을 수 없습니다.');
       const data = await fs.promises.readFile(path.join(__dirname,entry[0]));
       res.writeHead(200,{'Content-Type':`${entry[1]}; charset=utf-8`,'Cache-Control':'no-store'}); res.end(req.method === 'HEAD' ? undefined : data);
     } catch (error) {
       if (res.headersSent || res.destroyed) return;
       const status = error.status || (error.code === 'ENOENT' ? 404 : 500);
-      send(res,status,{error:error.status ? error.message : status === 404 ? '페이지를 찾을 수 없습니다.' : '저장 또는 처리 중 오류가 발생했습니다. 다시 시도해주세요.'});
+      const message = error.status ? error.message : status === 404 ? '페이지를 찾을 수 없습니다.' : '저장 또는 처리 중 오류가 발생했습니다. 다시 시도해주세요.';
+      send(res,status,{error:message, ...(error.code === 'STORE_CONFLICT' ? {code:'STORE_CONFLICT'} : {})});
     }
   });
   server.requestTimeout = 15_000; server.headersTimeout = 10_000;

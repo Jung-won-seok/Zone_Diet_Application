@@ -60,7 +60,7 @@ function createNaverCafe({getStore, commit, ApiError, auth, readPhoto, fetchImpl
     assert(body.revision===config.revision,'다른 창에서 카페 설정이 변경됐어요. 새로고침 후 다시 저장해주세요.',409);
     assert(!Object.values(recordsOf(store)).some(p=>p.status==='pending'),'카페 게시 결과 확인이 필요한 회원이 있어요. 게시 확인을 마친 뒤 설정을 변경해주세요.',409);
     const cafe=safeCafe(body.cafe), startDate=validDate(body.programStartDate), boards={};
-    assert(body.boards.length===store.members.length,'모든 회원의 게시판 설정을 함께 저장해주세요.');
+    assert(body.boards.length===store.members.length,'존다 참가자 전체의 게시판 설정을 함께 저장해주세요.');
     const members=new Set(store.members.map(m=>m.id)),seen=new Set(),menus=new Set();
     for(const row of body.boards) {
       assert(object(row) && members.has(row.memberId) && !seen.has(row.memberId),'중복되거나 알 수 없는 회원입니다.');seen.add(row.memberId);

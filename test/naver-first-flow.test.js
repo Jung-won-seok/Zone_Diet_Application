@@ -44,11 +44,11 @@ test('Naver-first login, explicit cafe request, manual assignment and photo publ
         if(data?.csrfToken)csrf=data.csrfToken;
         return {status:response.status,data,raw,headers:response.headers};
       },
-      async signIn(person) {
+      async signIn(person, destination='/#connect') {
         const start=await this.request('/api/naver/login','POST',{});assert.equal(start.status,200,start.raw);
         const authorization=new URL(start.data.authorizeUrl);
         const callback=await this.request('/api/naver/callback?'+new URLSearchParams({state:authorization.searchParams.get('state'),code:person}));
-        assert.equal(callback.status,303);assert.equal(callback.headers.get('location'),'/#connect');
+        assert.equal(callback.status,303);assert.equal(callback.headers.get('location'),destination);
         assert.ok(callback.headers.getSetCookie().some(c=>c.startsWith('zonda_session=')&&c.includes('HttpOnly; SameSite=Strict')));
         return this.request('/api/bootstrap');
       }
@@ -105,7 +105,7 @@ test('Naver-first login, explicit cafe request, manual assignment and photo publ
   });
   await t.test('subsequent Naver login preserves approval; another Naver user cannot see member records',async()=>{
     assert.equal((await alice.request('/api/logout','POST')).status,200);
-    const boot=await alice.signIn('alice');assert.equal(boot.data.user.id,'u01');
+    const boot=await alice.signIn('alice','/#reservations');assert.equal(boot.data.user.id,'u01');
     const state=await alice.request('/api/naver/onboarding');assert.equal(state.data.approved,true);assert.equal(state.data.connection.connectionId,originalConnection);
     const other=await bob.signIn('bob');assert.equal(other.data.user.pendingApproval,true);assert.deepEqual(other.data.members,[]);
     assert.equal((await bob.request('/api/meals?date='+date)).status,403);

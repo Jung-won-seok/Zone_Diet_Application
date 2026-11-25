@@ -141,7 +141,7 @@ test('repeat pending login preserves applicant request and connection identity; 
 test('returning linked Naver users sign in as their member and keep board approval valid',async()=>{
  const h=harness();await h.callback(await h.start('u01'));const connectionId=h.auth.publicConnection('u01').connectionId;
  h.store.naverCafe={boards:{u01:{menuId:'7',approvedConnectionId:connectionId}}};
- const r=await h.callback(await h.startLogin());assert.equal(r.headers.location,'/#connect');assert.equal(h.issuedSessions[0],'u01');assert.equal(h.auth.publicConnection('u01').connectionId,connectionId);assert.equal(h.store.naverCafe.boards.u01.approvedConnectionId,connectionId);assert.equal(h.store.naverApplicants,undefined);
+ const r=await h.callback(await h.startLogin());assert.equal(r.headers.location,'/#reservations');assert.equal(h.issuedSessions[0],'u01');assert.equal(h.auth.publicConnection('u01').connectionId,connectionId);assert.equal(h.store.naverCafe.boards.u01.approvedConnectionId,connectionId);assert.equal(h.store.naverApplicants,undefined);
  h.store.naverPublications.pending={memberId:'u01',status:'pending'};assert.equal((await h.callback(await h.startLogin())).headers.location,'/#naver-login-error');assert.equal(h.issuedSessions.length,1);
 });
 

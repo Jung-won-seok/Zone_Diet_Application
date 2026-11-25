@@ -172,7 +172,7 @@ function createNaverAuth({ getStore, commit, ApiError, config = {}, fetchImpl = 
       requireNoPublication(memberId);
       const identity={connectionId:record.connectionId,providerIdHash,appHash};
       await commit({...current,naverConnections:{...current.naverConnections,[memberId]:{...record,displayName,needsReconnect:false,encryptedTokens:encrypt(memberId,tokens),expiresAt:expiresAt(token.expires_in)}}});
-      return {userId:memberId,identity};
+      return {userId:memberId,identity,pendingApproval:false};
     }
     const applicants=Object.values(current.naverApplicants || {}).filter(a=>!a.memberId && a.providerIdHash===providerIdHash && a.appHash===appHash);
     if (applicants.length>1) throw new ApiError(409,'네이버 로그인 요청 정보를 관리자에게 확인해주세요.');
@@ -180,10 +180,10 @@ function createNaverAuth({ getStore, commit, ApiError, config = {}, fetchImpl = 
     const applicant={...existing,id,providerIdHash,appHash,displayName,connectionId:existing?.connectionId || crypto.randomUUID(),connectedAt:existing?.connectedAt || new Date().toISOString(),needsReconnect:false,encryptedTokens:encrypt(id,tokens),expiresAt:expiresAt(token.expires_in),memberId:null};
     const identity={connectionId:applicant.connectionId,providerIdHash,appHash};
     await commit({...current,naverApplicants:{...current.naverApplicants,[id]:applicant}});
-    return {userId:id,identity};
+    return {userId:id,identity,pendingApproval:true};
   }
   async function callback(req,res,url,origin) {
-    let success=false, loginMode=Boolean(nonceFrom(req,true));
+    let success=false, loginMode=Boolean(nonceFrom(req,true)), loginDestination='/#connect';
     try {
       requireConfigured(origin);
       const state=url.searchParams.get('state') || '', code=url.searchParams.get('code') || '';
@@ -203,6 +203,7 @@ function createNaverAuth({ getStore, commit, ApiError, config = {}, fetchImpl = 
         if (typeof establishSession!=='function') throw new ApiError(503,'네이버 로그인 설정을 확인해주세요.');
         const signedIn=await signInIdentity(profile.response,token);
         await establishSession(signedIn.userId,req,res,signedIn.identity);
+        if (!signedIn.pendingApproval) loginDestination='/#reservations';
       } else {
         requireNoPublication(pending.userId);
         const latest=getStore();
@@ -217,7 +218,7 @@ function createNaverAuth({ getStore, commit, ApiError, config = {}, fetchImpl = 
     } catch { /* Keep OAuth codes, access tokens and provider errors out of URLs and logs. */ }
     const previous=res.getHeader?.('Set-Cookie'), cookies=previous?(Array.isArray(previous)?previous:[previous]):[];
     cookies.push(cookie('',origin,0,loginMode));
-    res.writeHead(303,{'Location':loginMode?(success?'/#connect':'/#naver-login-error'):(success?'/#settings/naver-success':'/#settings/naver-error'),'Cache-Control':'no-store','Referrer-Policy':'no-referrer','Set-Cookie':cookies.length===1?cookies[0]:cookies});res.end();
+    res.writeHead(303,{'Location':loginMode?(success?loginDestination:'/#naver-login-error'):(success?'/#settings/naver-success':'/#settings/naver-error'),'Cache-Control':'no-store','Referrer-Policy':'no-referrer','Set-Cookie':cookies.length===1?cookies[0]:cookies});res.end();
   }
   async function disconnect(userId) {
     requireNoPublication(userId);

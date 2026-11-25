@@ -15,12 +15,14 @@ async function createCloudContext() {
   if (!result) {
     let passwords;
     try { passwords = JSON.parse(process.env.INITIAL_ACCOUNT_PASSWORDS || 'null'); } catch {}
-    const accounts = ['admin', ...Array.from({length:20}, (_,i) => `member${String(i+1).padStart(2,'0')}`)];
+    const demoMembers = passwords && Object.keys(passwords).some(name => name !== 'admin');
+    const accounts = ['admin'];
+    if (demoMembers) accounts.push(...Array.from({length:20}, (_,i) => `member${String(i+1).padStart(2,'0')}`));
     if (!passwords || accounts.some(name => typeof passwords[name] !== 'string' || passwords[name].length < 8)) {
       throw new ApiError(503, '초기 로그인 계정이 설정되지 않았습니다. 관리자에게 문의해주세요.');
     }
     try {
-      await put(STORE_PATH, JSON.stringify(seedStore(passwords)), { ...options, contentType: 'application/json', addRandomSuffix: false, allowOverwrite: false, cacheControlMaxAge: 60 });
+      await put(STORE_PATH, JSON.stringify(seedStore(passwords, { demoMembers })), { ...options, contentType: 'application/json', addRandomSuffix: false, allowOverwrite: false, cacheControlMaxAge: 60 });
     } catch (error) {
       result = await read(STORE_PATH);
       if (!result) throw error;
@@ -38,7 +40,11 @@ async function createCloudContext() {
         const saved = await put(STORE_PATH, JSON.stringify(next), { ...options, contentType: 'application/json', addRandomSuffix: false, allowOverwrite: true, ifMatch: etag, cacheControlMaxAge: 60 });
         etag = saved.etag;
       } catch (error) {
-        if (error instanceof BlobPreconditionFailedError) throw new ApiError(409, '다른 회원의 변경사항이 먼저 저장됐어요. 새로고침 후 다시 저장해주세요.');
+        if (error instanceof BlobPreconditionFailedError) {
+          const conflict = new ApiError(409, '다른 회원의 변경사항이 먼저 저장됐어요. 최신 현황을 확인한 뒤 다시 시도해주세요.');
+          conflict.code = 'STORE_CONFLICT';
+          throw conflict;
+        }
         throw error;
       }
     },

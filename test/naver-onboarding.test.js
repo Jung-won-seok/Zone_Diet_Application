@@ -59,6 +59,19 @@ test('only admin can map a consented current request to a free member and unique
   await assert.rejects(h.review(request),e=>e.status===409);assert.equal(h.approvals.length,0);
 });
 
+test('only enrolled Zonda participants appear as Naver Cafe approval targets', async () => {
+  const h = fixture();
+  h.store.users.push({id:'u03', name:'예약 회원', username:'member03'});
+  const request = (await h.submit()).data.request;
+  const directory = await h.invoke('/api/admin/naver/requests', 'GET', {}, 'admin');
+  assert.deepEqual(directory.data.members.map(member => member.id), ['u01', 'u02']);
+  await assert.rejects(h.review(request, {memberId:'u03'}), error => error.status === 422);
+  assert.equal(h.approvals.length, 0);
+  h.store.members.push({id:'u03', teamId:null, role:'', customRole:''});
+  await h.review(request, {memberId:'u03'});
+  assert.equal(h.store.naverApplicants.na_one.memberId, 'u03');
+});
+
 test('approval transfers encrypted connection atomically and the original applicant session resolves its approved state',async()=>{
   const h=fixture(),request=(await h.submit()).data.request;
   const result=await h.review(request,{memberName:'김실제'});

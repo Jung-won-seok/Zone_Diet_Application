@@ -26,17 +26,21 @@ class FormValues {
   [Symbol.iterator]() { return this.rows[Symbol.iterator](); }
 }
 function deferred() { let resolve; const promise=new Promise(done=>{resolve=done;});return {promise,resolve}; }
-function fixture(hash = '#record/2026-11-10') {
+function fixture(hash = '#record/2026-11-10', {isAdmin = false, zondaParticipant = true, pendingApproval = false} = {}) {
   const listeners={}, nodes=new Map(), links=[], prompts=[], messages=[], calls=[];
-  const flags={meal:false,naver:false,admin:false,answer:false};
+  const flags={meal:false,naver:false,admin:false,boxMember:false,answer:false};
   const location={hash,pathname:'/',search:''};
-  let form=null, initial=true, response=async()=>({personal:{settings:{name:'김민준',startWeight:'',goalWeight:''},records:{}},personalRevision:1});
+  const user = {id: isAdmin ? 'admin' : 'u01', name: '김민준', isAdmin, pendingApproval};
+  const personal = {settings:{name:'김민준',startWeight:'',goalWeight:''},records:{}};
+  const account = {user,zondaParticipant,personal,personalRevision:0,program:{name:'존다'},photoMealCounts:{}};
+  let form=null, initial=true, response=async()=>account;
   const body=new Element(), app=new Element(), nav=new Element(), profile=new Element(), settings=new Element({'data-page':'settings'});
   nodes.set('#app',app);nodes.set('.sidebar',new Element());nodes.set('.sidebar nav',nav);nodes.set('.settings-link',settings);nodes.set('.profile',profile);nodes.set('.program-label',new Element());nodes.set('#login-root',new Element());nodes.set('#page-label',new Element());nodes.set('#toast',new Element());
   nodes.set('.topbar > span:first-child',{firstChild:{textContent:''}});
   Object.defineProperty(nav,'innerHTML',{set(html){links.length=0;for(const [,attrs]of html.matchAll(/<a\s+([^>]*)>/g))links.push(new Element(attributes(attrs)));}});
   Object.defineProperty(profile,'innerHTML',{set(){nodes.set('#logout-button',new Element());}});
   Object.defineProperty(app,'innerHTML',{set(html){
+    app.markup = html;
     for(const key of [...nodes.keys()])if(key.startsWith('#form-')||['#record-form','#settings-form','#record-date'].includes(key))nodes.delete(key);
     form=null;
     const match=html.match(/<form\s+([^>]*)>([\s\S]*?)<\/form>/);
@@ -60,8 +64,10 @@ function fixture(hash = '#record/2026-11-10') {
     MobileNavigation:{create(options){navState.options=options;return{cancel(){navState.cancelled++;},sync(){navState.synced.push(links.find(e=>e.classList.contains('active'))?.dataset.page||'settings');}};}},
     fetch:async(url,options)=>{if(initial){initial=false;return new Promise(()=>{});}calls.push({url,options});const result=await response(url,options);return {ok:true,json:async()=>result};},
     setTimeout:()=>0,clearTimeout(){},confirm:message=>{prompts.push(message);return flags.answer;},
-    cleanupMeals(){flags.meal=false;},cleanupNaverUI(){flags.naver=false;},
+    cleanupMeals(){flags.meal=false;},cleanupNaverUI(){flags.naver=false;},cleanupReservations(){},cleanupBoxMembers(){flags.boxMember=false;},
     mealsHasUnsaved:()=>flags.meal,naverIsDirty:()=>flags.naver,adminIsDirty:()=>flags.admin,
+    boxMembersIsDirty:()=>flags.boxMember, reservationsView:()=>'<div>수업 예약</div>', boxMembersView:()=>'<div>박스 회원 관리</div>',
+    mountBoxMembers(){}, mountReservations(date){navState.bookingDate=date;},
     confirmMealDiscard:()=>flags.mealPrompt?flags.mealPrompt.promise:Promise.resolve(flags.answer),
     resetAdminDraft(){flags.admin=false;},memberTeamBanner:()=>'',mealLoadingView:()=>'<div>식단</div>',
     adminView:()=>'',accountsView:()=>'',naverAdminView:()=>'',naverOnboardingView:()=>'',naverMemberView:()=>'',
@@ -69,9 +75,11 @@ function fixture(hash = '#record/2026-11-10') {
     mealPage:{date:'2026-11-10'}
   });
   vm.runInContext(source,ctx);
-  ctx.messages=messages;
-  vm.runInContext("toast=message=>messages.push(message); authReady=true; session={id:'u01',name:'김민준',isAdmin:false}; state={settings:{name:'김민준',startWeight:'',goalWeight:''},records:{}}; bootstrap={personal:state,personalRevision:0,program:{name:'존다'},photoMealCounts:{}}; render();",ctx);
-  return {ctx,location,flags,prompts,messages,calls,navState,nodes,
+  ctx.messages=messages;ctx.testAccount=account;
+  vm.runInContext("toast=message=>messages.push(message); authReady=true; bootstrap=testAccount; session=bootstrap.user; state=bootstrap.personal; render();",ctx);
+  return {ctx,location,flags,prompts,messages,calls,navState,nodes,body,account,
+    get pages(){return links.map(link=>link.dataset.page);},
+    get markup(){return app.markup;},
     get form(){return form;},get active(){return links.find(e=>e.classList.contains('active'))?.dataset.page||'settings';},
     setResponse(fn){response=fn;},eval:code=>vm.runInContext(code,ctx),
     field:name=>form.controls.find(e=>e.name===name),
@@ -124,4 +132,63 @@ test('accepted personal discard switches page once and clears old-form dirty sta
   const f=fixture();f.field('workoutNote').value='미저장 운동';f.flags.answer=true;await f.navigate('#team');
   assert.equal(f.location.hash,'#team');assert.equal(f.active,'team');assert.equal(f.form,null);assert.equal(f.eval('personalIsDirty()'),false);assert.equal(f.prompts.length,1);
   await f.navigate('#team');assert.equal(f.prompts.length,1);assert.equal(f.eval('navigationPending'),false);
+});
+
+test('booking is the default for box members and Zonda keeps previous participant bookmarks', async () => {
+  const f = fixture('');
+  assert.equal(f.active, 'reservations');
+  assert.deepEqual(f.pages, ['reservations', 'zonda']);
+  await f.navigate('#reservations/2027-01-04');
+  assert.equal(f.navState.bookingDate, '2027-01-04');
+  await f.navigate('#zonda');
+  assert.equal(f.calls.at(-1).url, '/api/bootstrap');
+  assert.equal(f.active, 'today');
+  assert.equal(f.body.classList.contains('in-zonda'), true);
+  await f.navigate('#record/2026-11-10');
+  assert.equal(f.active, 'record');
+  assert.equal(f.field('date').value, '2026-11-10');
+  const shell = fs.readFileSync(require.resolve('../index.html'), 'utf8');
+  const backLink = [...shell.matchAll(/<a\s+([^>]*)>/g)]
+    .map(match => attributes(match[1])).find(link => link.class?.split(/\s+/).includes('box-return'));
+  assert.equal(backLink?.href, '#reservations');
+  await f.navigate(backLink.href);
+  assert.equal(f.active, 'reservations');
+  assert.equal(f.body.classList.contains('in-zonda'), false);
+});
+
+test('box-only members can open Zonda information and gain access after enrollment', async () => {
+  const f = fixture('#members', {zondaParticipant: false});
+  assert.equal(f.active, 'reservations');
+  assert.ok(!f.pages.includes('members'));
+  await f.navigate('#zonda');
+  assert.equal(f.active, 'zonda');
+  assert.match(f.markup, /href="#reservations"/);
+  assert.equal(f.body.classList.contains('in-box'), true);
+  await f.navigate('#record/2026-11-10');
+  assert.equal(f.active, 'reservations');
+  assert.equal(f.form, null);
+  f.setResponse(async () => ({...f.account, zondaParticipant: true}));
+  await f.navigate('#zonda');
+  assert.equal(f.active, 'today');
+});
+
+test('administrators manage the box and Zonda separately; unapproved applicants only see onboarding', async () => {
+  const f = fixture('', {isAdmin: true, zondaParticipant: false});
+  assert.equal(f.active, 'reservations');
+  assert.deepEqual(f.pages, ['reservations', 'members', 'zonda']);
+  await f.navigate('#members');
+  assert.equal(f.active, 'members');
+  assert.match(f.markup, /박스 회원 관리/);
+  f.flags.boxMember = true;
+  await f.navigate('#reservations');
+  assert.equal(f.active, 'members');
+  assert.equal(f.unload().prevented, true);
+  f.flags.answer = true;
+  await f.navigate('#zonda');
+  assert.equal(f.active, 'admin');
+  assert.equal(f.body.classList.contains('in-zonda'), true);
+  assert.ok(f.pages.includes('accounts'));
+  const pending = fixture('#reservations', {zondaParticipant: false, pendingApproval: true});
+  assert.deepEqual(pending.pages, ['connect']);
+  assert.equal(pending.active, 'connect');
 });

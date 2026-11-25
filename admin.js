@@ -29,12 +29,33 @@ function adminIssues() {
   }
   return {errors,warnings};
 }
+function teamPresetPicker() {
+  const size = adminDraft.length;
+  if (!size) return '';
+  if (size > bootstrap.teams.length * 6) {
+    return '<p class="account-info">팀당 최대 6명까지 배정할 수 있어요. 자리가 없는 참가자는 미배정으로 둘 수 있습니다.</p>';
+  }
+  const minTeams = Math.ceil(size / 6);
+  const maxTeams = Math.min(bootstrap.teams.length, Math.max(minTeams, Math.floor(size / 4)));
+  const choices = [];
+  for (let teams = maxTeams; teams >= minTeams; teams--) {
+    const counts = Array.from({length:teams}, (_, i) => Math.floor(size / teams) + Number(i < size % teams));
+    choices.push(counts);
+  }
+  if (size === 20 && bootstrap.teams.length >= 4) choices.push([6, 5, 5, 4]);
+  const buttons = choices.map(counts => {
+    const uniform = counts.every(count => count === counts[0]);
+    const label = uniform ? `${counts[0]}명 × ${counts.length}팀` : counts.map(count => `${count}명`).join(' / ');
+    return `<button type="button" data-preset="${counts.join(',')}">${label}</button>`;
+  }).join('');
+  return `<details class="preset-picker"><summary>인원별 팀 편성 예시 적용</summary><p>참가자 ${size}명을 목록 순서대로 배정합니다. 저장하면 팀 편성이 반영됩니다.</p><div>${buttons}</div></details>`;
+}
 function adminView() {
   initAdminDraft();
   return heading('TEAM BUILDER', '함께할 팀을 만들어주세요.', '팀을 나누고, 각자의 역할을 정해요. 변경한 내용은 저장 후 회원에게 반영됩니다.', '<span class="date-tag">관리자 전용</span>') +
   `<section class="program-strip"><div><span class="eyebrow">8-WEEK TEAM PROGRAM</span><h2>${escapeHTML(bootstrap.program.name)}</h2><p>${escapeHTML(bootstrap.program.startDate)} — ${escapeHTML(bootstrap.program.endDate)}</p></div><div class="program-numbers"><div><strong>${bootstrap.members.length}</strong><span>참여 회원</span></div><div><strong>${bootstrap.teams.length}</strong><span>팀</span></div><div><strong>8</strong><span>주간 여정</span></div></div></section>
   <div class="section-heading"><h2>팀 편성 현황</h2><span>팀당 최대 6명 · 기본 역할 4개 + 기타</span></div><div class="team-grid" id="team-summary">${teamSummaries()}</div>
-  <section class="card assignment-card"><div class="card-heading"><div><h2>회원 배정 · 역할 설정</h2><p class="subtitle">기본 역할은 팀마다 한 명씩, 추가 인원은 기타 역할로 지정해요.</p></div><span class="badge">가상 회원 20명</span></div><div class="admin-toolbar"><div class="search-wrap"><label class="sr-only" for="member-search">회원 이름 또는 아이디 검색</label><input id="member-search" placeholder="이름 또는 아이디 검색" value="${escapeHTML(memberSearch)}"></div><label class="sr-only" for="team-filter">팀 필터</label><select id="team-filter"><option value="all">전체 팀</option>${bootstrap.teams.map(t=>`<option value="${escapeHTML(t.id)}" ${teamFilter===t.id?'selected':''}>${escapeHTML(t.name)}</option>`).join('')}<option value="none" ${teamFilter==='none'?'selected':''}>미배정</option></select></div><details class="preset-picker"><summary>인원별 팀 편성 예시 적용</summary><p>아래 예시는 현재 편집 내용을 바꿉니다. 저장하기 전까지 회원에게 반영되지 않습니다.</p><div><button type="button" data-preset="4,4,4,4,4">4명 × 5팀</button><button type="button" data-preset="5,5,5,5,0">5명 × 4팀</button><button type="button" data-preset="6,5,5,4,0">6명 / 5명 / 5명 / 4명</button></div></details><div class="assignment-head"><span>회원</span><span>소속 팀</span><span>팀 역할</span><span>기타 역할명</span></div><div id="assignment-list">${assignmentRows()}</div><div id="assignment-feedback" aria-live="polite">${assignmentFeedback()}</div></section><div class="save-bar"><div id="save-status">${saveStatus()}</div><div><button type="button" id="reset-assignments" class="button secondary">저장된 편성 불러오기</button><button type="button" id="save-assignments" class="button" ${!adminIsDirty()||adminIssues().errors.length?'disabled':''}>변경사항 저장 ↗</button></div></div><p class="admin-footnote">역할은 담당 업무를 표시합니다. 패널티 부과·SNS 게시·미션 등록 기능은 아직 연결되지 않았습니다.</p>`;
+  <section class="card assignment-card"><div class="card-heading"><div><h2>회원 배정 · 역할 설정</h2><p class="subtitle">기본 역할은 팀마다 한 명씩, 추가 인원은 기타 역할로 지정해요.</p></div><span class="badge">존다 참가자 ${bootstrap.members.length}명</span></div><div class="admin-toolbar"><div class="search-wrap"><label class="sr-only" for="member-search">회원 이름 또는 아이디 검색</label><input id="member-search" placeholder="이름 또는 아이디 검색" value="${escapeHTML(memberSearch)}"></div><label class="sr-only" for="team-filter">팀 필터</label><select id="team-filter"><option value="all">전체 팀</option>${bootstrap.teams.map(t=>`<option value="${escapeHTML(t.id)}" ${teamFilter===t.id?'selected':''}>${escapeHTML(t.name)}</option>`).join('')}<option value="none" ${teamFilter==='none'?'selected':''}>미배정</option></select></div>${teamPresetPicker()}<div class="assignment-head"><span>회원</span><span>소속 팀</span><span>팀 역할</span><span>기타 역할명</span></div><div id="assignment-list">${assignmentRows()}</div><div id="assignment-feedback" aria-live="polite">${assignmentFeedback()}</div></section><div class="save-bar"><div id="save-status">${saveStatus()}</div><div><button type="button" id="reset-assignments" class="button secondary">저장된 편성 불러오기</button><button type="button" id="save-assignments" class="button" ${!adminIsDirty()||adminIssues().errors.length?'disabled':''}>변경사항 저장 ↗</button></div></div><p class="admin-footnote">역할은 담당 업무를 표시합니다. 패널티 부과·SNS 게시·미션 등록 기능은 아직 연결되지 않았습니다.</p>`;
 }
 function teamSummaries() {
   return bootstrap.teams.map((team,i)=>{
@@ -45,7 +66,8 @@ function teamSummaries() {
 }
 function assignmentRows() {
   const members = adminDraft.filter(m=>(teamFilter==='all'||(teamFilter==='none'?!m.teamId:m.teamId===teamFilter)) && `${m.name} ${m.username}`.toLowerCase().includes(memberSearch.toLowerCase()));
-  if(!members.length) return '<p class="empty-state">조건에 맞는 회원이 없습니다.</p>';
+  if (!adminDraft.length) return '<p class="empty-state">존다 참가자가 없습니다. 박스 회원 관리에서 참가자를 등록해주세요.</p>';
+  if (!members.length) return '<p class="empty-state">조건에 맞는 회원이 없습니다.</p>';
   return members.map(m=>`<div class="assignment-row" data-member="${escapeHTML(m.id)}"><div class="member-identity"><span class="member-avatar">${escapeHTML(m.name.slice(-2))}</span><div><strong>${escapeHTML(m.name)}</strong><small>${escapeHTML(m.username)}</small></div></div><div><label class="sr-only" for="team-${m.id}">${escapeHTML(m.name)} 팀</label><select id="team-${m.id}" data-edit="teamId"><option value="">미배정</option>${bootstrap.teams.map(t=>`<option value="${t.id}" ${m.teamId===t.id?'selected':''}>${escapeHTML(t.name)}</option>`).join('')}</select></div><div><label class="sr-only" for="role-${m.id}">${escapeHTML(m.name)} 역할</label><select id="role-${m.id}" data-edit="role" ${!m.teamId?'disabled':''}><option value="">역할 선택</option>${Object.entries(ROLE_NAMES).map(([key,label])=>`<option value="${key}" ${m.role===key?'selected':''}>${label}</option>`).join('')}</select></div><div><label class="sr-only" for="custom-${m.id}">${escapeHTML(m.name)} 기타 역할명</label><input id="custom-${m.id}" data-edit="customRole" maxlength="40" value="${escapeHTML(m.customRole)}" ${m.role!=='other'?'disabled':''} placeholder="${m.role==='other'?'예: 기록 담당':'기타 선택 시 입력'}"></div></div>`).join('');
 }
 function assignmentFeedback() { const {errors,warnings}=adminIssues(); return errors.length ? `<div class="validation-box error"><strong>저장 전 확인해주세요</strong><ul>${errors.map(e=>`<li>${escapeHTML(e)}</li>`).join('')}</ul></div>` : warnings.length ? `<div class="validation-box"><strong>편성 중인 팀이 있어요 · 현재 상태로 저장할 수 있습니다</strong><p>${warnings.map(escapeHTML).join(' / ')}</p></div>` : '<p class="validation-ok">✓ 모든 팀의 인원과 역할 구성이 확인되었습니다.</p>'; }
@@ -86,7 +108,7 @@ function bindAdmin() {
   document.querySelector('#reset-assignments').addEventListener('click',async()=>{if(adminIsDirty()&&!confirm('저장하지 않은 변경을 버리고 저장된 편성을 불러올까요?'))return;try{await loadBootstrap();resetAdminDraft();render();toast('저장된 편성을 불러왔어요.');}catch(error){toast(error.message);}});
 }
 function accountsView() {
-  return heading('MEMBER DIRECTORY','함께하는 20명의 멤버.','관리자 계정은 팀 인원에 포함되지 않습니다. 아래 정보는 저장된 편성을 기준으로 표시됩니다.')+`<section class="card"><div class="card-heading"><h2>회원 계정 목록</h2><span class="badge">20명 · 가상 데이터</span></div><p class="account-info">초기 비밀번호는 전달받은 <strong>계정 안내 파일</strong>에 있습니다. 이 화면에는 비밀번호를 표시하지 않습니다.</p><div class="directory-head"><span>회원</span><span>아이디</span><span>소속 팀</span><span>역할</span></div>${bootstrap.members.map(m=>`<div class="directory-row"><strong>${escapeHTML(m.name)}</strong><code>${escapeHTML(m.username)}</code><span>${escapeHTML(teamName(m.teamId))}</span>${roleBadge(m)}</div>`).join('')}</section>`;
+  return heading('MEMBER DIRECTORY','존다 참가자','등록된 존다 참가자의 팀과 역할을 확인하세요.')+`<section class="card"><div class="card-heading"><h2>참가자 명단</h2><span class="badge">${bootstrap.members.length}명</span></div><div class="directory-head"><span>회원</span><span>아이디</span><span>소속 팀</span><span>역할</span></div>${bootstrap.members.map(m=>`<div class="directory-row"><strong>${escapeHTML(m.name)}</strong><code>${escapeHTML(m.username)}</code><span>${escapeHTML(teamName(m.teamId))}</span>${roleBadge(m)}</div>`).join('')}</section>`;
 }
 function memberTeamBanner() {
   const me=bootstrap.members.find(m=>m.id===session.id);

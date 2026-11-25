@@ -1,4 +1,15 @@
-/* The desktop sidebar keeps its existing layout. */
+.box-return { display: none; }
+body.in-zonda .box-return {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-right: auto;
+  margin-left: clamp(12px, 3vw, 32px);
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+}
 .sidebar .nav-mobile-label,
 .sidebar .mobile-nav-indicator {
   display: none;
@@ -61,6 +72,12 @@
     grid-template-columns: minmax(0, 1fr);
     flex: 1 1 0;
   }
+
+  body.in-box .sidebar nav {
+    display: flex;
+    flex: 1 1 0;
+  }
+  body.in-box .sidebar nav a { flex: 1 1 0; }
 
   body .sidebar nav a,
   body .sidebar .settings-link {

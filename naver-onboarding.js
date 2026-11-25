@@ -88,7 +88,7 @@ function createNaverOnboarding({getStore,commit,ApiError,auth}) {
     assert(auth.configuration().ready && isCurrent(request,store,connection),'네이버 계정이나 카페·프로그램이 변경됐어요. 회원에게 다시 연결을 신청하도록 안내해주세요.',409);
     const memberId=text(body.memberId,100,'앱 회원',true), menuId=text(body.menuId,16,'게시판 번호',true), label=text(body.label,80,'게시판 이름',true);
     assert(/^[1-9]\d{0,15}$/.test(menuId),'게시판 번호는 숫자로 입력해주세요.');
-    assert(store.members.some(m=>m.id===memberId),'등록된 앱 회원을 선택해주세요.');
+    assert(store.members.some(m=>m.id===memberId),'존다 참가자로 등록된 회원을 선택해주세요.');
     assert(!request.memberId || request.memberId===memberId,'기존 회원의 요청을 다른 회원 계정에 연결할 수 없습니다.',409);
     assert(!Object.entries(config.boards||{}).some(([id,b])=>id!==memberId && b.menuId===menuId),'이 게시판은 다른 회원에게 배정되어 있습니다.',409);
     let nextConnection, applicants=store.naverApplicants;

@@ -1,4 +1,4 @@
-const labels = { today: '오늘의 현황', team: '우리 팀 식단', board: '전체 식단', record: '데일리 기록', progress: '나의 변화', settings: '내 설정', admin: '팀 · 역할 관리', accounts: '회원 계정', naver: '네이버 카페 연결', connect: '카페 연동 신청' };
+const labels = { reservations: '수업 예약', members: '박스 회원 관리', zonda: '존다 프로그램', today: '오늘의 현황', team: '우리 팀 식단', board: '전체 식단', record: '데일리 기록', progress: '나의 변화', settings: '내 설정', admin: '팀 · 역할 관리', accounts: '존다 참가자', naver: '네이버 카페 연결', connect: '카페 연동 신청' };
 const blankState = () => ({ settings: { name: '', startWeight: '', goalWeight: '' }, records: {} });
 let state = blankState();
 let session = null;
@@ -23,6 +23,9 @@ function personalFormSignature() {
 function personalIsDirty() { return personalSaving || personalFormSignature() !== personalSaved; }
 function navIcon(page) {
   const paths = {
+    reservations: '<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v5m10-5v5M3 11h18m-13 4h3"/>',
+    members: '<circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2m3-12v6m-3-3h6"/>',
+    zonda: '<path d="M20 3C11 3 4 5 4 13a6 6 0 0 0 6 6c8 0 10-9 10-16ZM3 21l11-11"/>',
     today: '<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/>',
     team: '<circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6m2 3a5 5 0 0 1 3 4v3"/>',
     board: '<rect x="3" y="3" width="18" height="18" rx="4"/><path d="M8 3v18M8 9h13M13 14h4m-4 3h4"/>',
@@ -53,7 +56,10 @@ async function api(url, options = {}) {
   const data = await response.json();
   if (!response.ok) {
     if (response.status === 401 && url !== '/api/login') { session = null; bootstrap = null; csrfToken = ''; state = blankState(); render(); }
-    const error = new Error(data.error || '요청을 처리하지 못했습니다.'); error.status = response.status; throw error;
+    const error = new Error(data.error || '요청을 처리하지 못했습니다.');
+    error.status = response.status;
+    error.code = data.code;
+    throw error;
   }
   return data;
 }
@@ -65,22 +71,53 @@ async function loadBootstrap() {
   bootstrap = await api('/api/bootstrap'); session = bootstrap.user; csrfToken = bootstrap.csrfToken; state = bootstrap.personal || blankState();
 }
 function loginView(error = '') {
-  return `<div class="login-shell"><section class="login-story"><a class="brand" href="#"><span class="brand-mark">L<span>↗</span></span><span>LEBEN ZONDA<small>8-WEEK TEAM PROGRAM</small></span></a><div><span class="eyebrow">BETTER, TOGETHER</span><h1>나의 변화,<br>우리의 8주.</h1><p>함께 기록하고, 서로 응원하고.<br>각자의 역할로 완성하는 존다 프로그램.</p><div class="login-people"><span>식단</span><span>조장</span><span>운동</span><span>SNS</span></div></div><small>20 MEMBERS · 5 TEAMS · ONE JOURNEY</small></section><section class="login-panel"><div class="eyebrow">WELCOME TO THE TEAM</div><h2>우리 팀에 합류하세요.</h2><p class="subtitle">네이버로 로그인하고 카페 연동을 신청해주세요.</p>${naverLoginView()}<details class="legacy-login"><summary>관리자 · 기존 계정 로그인</summary><form id="login-form"><div class="field"><label for="login-id">아이디</label><input id="login-id" name="username" autocomplete="username" required maxlength="40" placeholder="아이디 입력"></div><div class="field"><label for="login-password">비밀번호</label><input id="login-password" name="password" autocomplete="current-password" type="password" required maxlength="128" placeholder="비밀번호 입력"></div><p id="login-error" class="form-error" role="alert">${escapeHTML(error)}</p><button class="button" type="submit">로그인 <span>↗</span></button></form></details><div class="demo-note"><strong>테스트용 프로그램입니다</strong><p>가상의 회원 20명과 관리자 1명이 등록되어 있습니다.<br>아이디와 초기 비밀번호는 계정 안내 파일을 확인해주세요.</p></div></section></div>`;
+  return `<div class="login-shell"><section class="login-story"><span class="brand"><span class="brand-mark">L<span>↗</span></span><span>LEBEN<small>CROSSFIT</small></span></span>
+    <div><h1>크로스핏 레벤</h1><p>수업 시간표를 확인하고 예약하세요.<br>존다 참가자는 팀 식단과 운동 기록도 함께 관리할 수 있어요.</p></div></section>
+    <section class="login-panel"><h2>박스 회원 로그인</h2><p class="subtitle">관리자에게 받은 아이디와 비밀번호를 입력해주세요.</p>
+    <form id="login-form"><div class="field"><label for="login-id">아이디</label><input id="login-id" name="username" autocomplete="username" required maxlength="80"></div>
+    <div class="field"><label for="login-password">비밀번호</label><input id="login-password" name="password" autocomplete="current-password" type="password" required maxlength="200"></div>
+    <p id="login-error" class="form-error" role="alert">${escapeHTML(error)}</p><button class="button" type="submit">로그인</button></form>
+    <details class="legacy-login"${location.hash === '#naver-login-error' ? ' open' : ''}><summary>존다 참가자 네이버 로그인</summary>${naverLoginView()}</details></section></div>`;
 }
-function renderShell() {
+const memberProgramRoutes = [['today','오늘의 현황','오늘'],['team','우리 팀','우리 팀'],['board','전체 식단','전체 식단'],['record','데일리 기록','기록'],['progress','나의 변화','변화']];
+const adminProgramRoutes = [['admin','팀 · 역할 관리','팀 관리'],['accounts','존다 참가자','참가자'],['naver','네이버 카페 연결','카페 연결'],['board','전체 식단','전체 식단']];
+function resolvePage(route, detail) {
+  if (session.pendingApproval) return 'connect';
+  if (route === 'members' && session.isAdmin) return 'members';
+  if (!route || route === 'reservations') return 'reservations';
+  if (route === 'zonda') return session.isAdmin ? 'admin' : bootstrap.zondaParticipant ? 'today' : 'zonda';
+  const programRoutes = session.isAdmin ? adminProgramRoutes : memberProgramRoutes;
+  if (session.isAdmin || bootstrap.zondaParticipant) {
+    if (programRoutes.some(([id]) => id === route)) return route;
+    if (!session.isAdmin && ['settings','connect'].includes(route)) return detail === 'naver-success' ? 'connect' : route;
+  }
+  return 'reservations';
+}
+function renderShell(page) {
   document.body.classList.toggle('is-admin', session.isAdmin);
   document.body.classList.toggle('is-pending-member', Boolean(session.pendingApproval));
-  const routes = session.pendingApproval ? [['connect','카페 연동 신청','카페 연동']] : session.isAdmin ? [['admin','팀 · 역할 관리','팀 관리'], ['accounts','회원 계정','회원'], ['naver','네이버 카페 연결','카페 연결'], ['board','전체 식단','전체 식단']] : [['today','오늘의 현황','오늘'],['team','우리 팀','우리 팀'],['board','전체 식단','전체 식단'],['record','데일리 기록','기록'],['progress','나의 변화','변화']];
+  const inBox = ['reservations','members','zonda'].includes(page);
+  document.body.classList.toggle('in-box', inBox);
+  document.body.classList.toggle('in-zonda', !inBox && !session.pendingApproval);
+  let routes;
+  if (inBox) {
+    routes = [['reservations','수업 예약','수업 예약']];
+    if (session.isAdmin) routes.push(['members','박스 회원 관리','회원 관리']);
+    routes.push(['zonda','존다 프로그램','존다']);
+  } else {
+    routes = session.pendingApproval ? [['connect','카페 연동 신청','카페 연동']] : session.isAdmin ? adminProgramRoutes : memberProgramRoutes;
+  }
   document.querySelector('.sidebar nav').innerHTML = routes.map(([id,label,mobileLabel]) => `<a href="#${id}" data-page="${id}" aria-label="${label}" draggable="false">${navLabel(id,label,mobileLabel)}</a>`).join('');
   const settingsLink = document.querySelector('.settings-link');
   settingsLink.innerHTML = navLabel('settings','프로그램 설정','설정');
   settingsLink.setAttribute('aria-label','프로그램 설정');
   settingsLink.setAttribute('draggable','false');
-  document.querySelector('.program-label').textContent = session.pendingApproval ? '카페 연결 준비' : session.isAdmin ? '관리자 워크스페이스' : bootstrap.program.name;
-  document.querySelector('.settings-link').style.display = session.isAdmin || session.pendingApproval ? 'none' : '';
+  document.querySelector('.program-label').textContent = inBox ? '박스 메뉴' : session.pendingApproval ? '카페 연결 준비' : bootstrap.program.name;
+  document.querySelector('.settings-link').style.display = inBox || session.isAdmin || session.pendingApproval ? 'none' : '';
   document.querySelector('.profile').innerHTML = `<span class="avatar">${session.isAdmin ? 'AD' : escapeHTML(session.name.slice(-2))}</span><span>${escapeHTML(session.name)}</span><button id="logout-button" type="button">로그아웃</button>`;
   document.querySelector('#logout-button').addEventListener('click', async () => {
     if (navigationPending || personalSaving) return;
+    if (boxMembersIsDirty() && !confirm('회원 등록 화면에서 나가시겠어요?')) return;
     if (personalIsDirty() && !confirm('저장하지 않은 기록을 버리고 로그아웃할까요?')) return;
     if (naverIsDirty() && !confirm('저장하지 않은 카페 연결 설정이 있습니다. 로그아웃할까요?')) return;
     if(mealsHasUnsaved() && !await confirmMealDiscard()) return;
@@ -114,7 +151,7 @@ function task(icon, title, description, done, route = 'record') { return `<a cla
 function recordView(date = todayKey()) {
   const r = state.records[date] || {};
   return heading('DAILY JOURNAL', '오늘을 기록해요.', '완벽한 하루가 아니어도 괜찮아요. 있는 그대로 남겨주세요.') +
-    `<div class="form-layout"><form id="record-form" class="form-stack"><section class="card"><div class="card-heading"><h2>몸 상태</h2><span class="badge">01</span></div><div class="field-row"><div class="field"><label for="record-date">기록 날짜</label><input id="record-date" name="date" type="date" required max="${todayKey()}" value="${escapeHTML(date)}"></div><div class="field"><label for="weight">체중 (kg)</label><input id="weight" name="weight" type="number" min="1" max="500" step="0.1" placeholder="예: 72.5" value="${escapeHTML(r.weight || '')}"></div></div></section><section class="card"><div class="card-heading"><h2>식단 메모</h2><span class="badge">나만 보기</span></div><a class="photo-record-link" href="#team/${date}"><span><strong>사진은 우리 팀 식단에 올려주세요</strong><small>식단 담당이 모아 전체 회원에게 공유해요</small></span><span>↗</span></a>${['breakfast', 'lunch', 'dinner'].map((key, i) => `<div class="field"><label for="${key}">${['아침', '점심', '저녁'][i]}</label><input id="${key}" name="${key}" maxlength="300" placeholder="먹은 음식을 간단하게 적어주세요" value="${escapeHTML(r[key] || '')}"></div>`).join('')}</section><section class="card"><div class="card-heading"><h2>운동</h2><span class="badge">03</span></div><label class="check-field"><input name="workout" type="checkbox" ${r.workout ? 'checked' : ''}> 오늘 운동을 완료했어요</label><div class="field"><label for="workout-note">운동 메모 <small>선택</small></label><textarea id="workout-note" name="workoutNote" maxlength="1000" placeholder="오늘의 WOD, 운동 시간 또는 휴식 메모">${escapeHTML(r.workoutNote || '')}</textarea></div><div class="form-actions"><button class="button" type="submit">기록 저장하기 <span>↗</span></button></div></section></form><aside class="card helper-card"><div class="large-symbol">✳</div><h2>오늘의 나에게 집중하기</h2><p>체중은 가능하면 비슷한 시간에 기록해보세요. 하루의 숫자보다 쌓여가는 흐름을 살펴봐요.</p><p>모든 항목을 채우지 않아도 저장할 수 있어요. 쉬는 날에는 운동 메모에 휴식을 남겨주세요.</p><p>같은 날짜의 기록을 다시 저장하면 기존 내용이 수정됩니다.</p></aside></div>`;
+    `<div class="form-layout"><form id="record-form" class="form-stack"><section class="card"><div class="card-heading"><h2>몸 상태</h2><span class="badge">01</span></div><div class="field-row"><div class="field"><label for="record-date">기록 날짜</label><input id="record-date" name="date" type="date" required max="${todayKey()}" value="${escapeHTML(date)}"></div><div class="field"><label for="weight">체중 (kg)</label><input id="weight" name="weight" type="number" min="1" max="500" step="0.1" placeholder="예: 72.5" value="${escapeHTML(r.weight || '')}"></div></div></section><section class="card"><div class="card-heading"><h2>식단 메모</h2><span class="badge">나만 보기</span></div><a class="photo-record-link" href="#team/${date}"><span><strong>사진은 우리 팀 식단에 올려주세요</strong><small>식단 담당이 모아 존다 참가자 전체에게 공유해요</small></span><span>↗</span></a>${['breakfast', 'lunch', 'dinner'].map((key, i) => `<div class="field"><label for="${key}">${['아침', '점심', '저녁'][i]}</label><input id="${key}" name="${key}" maxlength="300" placeholder="먹은 음식을 간단하게 적어주세요" value="${escapeHTML(r[key] || '')}"></div>`).join('')}</section><section class="card"><div class="card-heading"><h2>운동</h2><span class="badge">03</span></div><label class="check-field"><input name="workout" type="checkbox" ${r.workout ? 'checked' : ''}> 오늘 운동을 완료했어요</label><div class="field"><label for="workout-note">운동 메모 <small>선택</small></label><textarea id="workout-note" name="workoutNote" maxlength="1000" placeholder="오늘의 WOD, 운동 시간 또는 휴식 메모">${escapeHTML(r.workoutNote || '')}</textarea></div><div class="form-actions"><button class="button" type="submit">기록 저장하기 <span>↗</span></button></div></section></form><aside class="card helper-card"><div class="large-symbol">✳</div><h2>오늘의 나에게 집중하기</h2><p>체중은 가능하면 비슷한 시간에 기록해보세요. 하루의 숫자보다 쌓여가는 흐름을 살펴봐요.</p><p>모든 항목을 채우지 않아도 저장할 수 있어요. 쉬는 날에는 운동 메모에 휴식을 남겨주세요.</p><p>같은 날짜의 기록을 다시 저장하면 기존 내용이 수정됩니다.</p></aside></div>`;
 }
 function progressView() {
   const current = Number(currentWeight()), start = Number(state.settings.startWeight);
@@ -124,13 +161,15 @@ function progressView() {
 }
 function settingsView() {
   return heading('PROGRAM SETTINGS', '나에게 맞는 시작.', '프로그램에서 사용할 이름과 체중 목표를 설정해주세요.') +
-    `<form id="settings-form" class="card settings-card"><div class="card-heading"><h2>나의 기본 정보</h2><span class="badge">모든 항목 선택</span></div><div class="field"><label for="name">이름 또는 닉네임</label><input id="name" name="name" maxlength="30" value="${escapeHTML(state.settings.name)}" placeholder="어떻게 불러드릴까요?"></div><div class="field-row" style="margin-top:22px"><div class="field"><label for="start-weight">시작 체중 (kg)</label><input id="start-weight" name="startWeight" type="number" min="1" max="500" step="0.1" value="${escapeHTML(state.settings.startWeight)}" placeholder="예: 75"></div><div class="field"><label for="goal-weight">목표 체중 (kg)</label><input id="goal-weight" name="goalWeight" type="number" min="1" max="500" step="0.1" value="${escapeHTML(state.settings.goalWeight)}" placeholder="직접 설정해주세요"></div></div><div class="form-actions"><button class="button" type="submit">설정 저장하기 ↗</button></div></form><p class="privacy-note">기록은 로그인한 계정별로 서버에 저장됩니다.<br>개인 체중과 이곳의 식단 메모는 다른 회원에게 공개되지 않습니다.<br>우리 팀에 올린 식단 사진과 사진 메모는 팀원이 볼 수 있고, 식단 담당이 전체 회원에게 공유할 수 있습니다.<br>팀과 역할은 관리자가 지정하며, 이 화면의 이름은 개인 화면에서 사용할 닉네임입니다.</p>`;
+    `<form id="settings-form" class="card settings-card"><div class="card-heading"><h2>나의 기본 정보</h2><span class="badge">모든 항목 선택</span></div><div class="field"><label for="name">이름 또는 닉네임</label><input id="name" name="name" maxlength="30" value="${escapeHTML(state.settings.name)}" placeholder="어떻게 불러드릴까요?"></div><div class="field-row" style="margin-top:22px"><div class="field"><label for="start-weight">시작 체중 (kg)</label><input id="start-weight" name="startWeight" type="number" min="1" max="500" step="0.1" value="${escapeHTML(state.settings.startWeight)}" placeholder="예: 75"></div><div class="field"><label for="goal-weight">목표 체중 (kg)</label><input id="goal-weight" name="goalWeight" type="number" min="1" max="500" step="0.1" value="${escapeHTML(state.settings.goalWeight)}" placeholder="직접 설정해주세요"></div></div><div class="form-actions"><button class="button" type="submit">설정 저장하기 ↗</button></div></form><p class="privacy-note">기록은 로그인한 계정별로 서버에 저장됩니다.<br>개인 체중과 이곳의 식단 메모는 다른 회원에게 공개되지 않습니다.<br>우리 팀에 올린 식단 사진과 사진 메모는 팀원이 볼 수 있고, 식단 담당이 존다 참가자 전체에게 공유할 수 있습니다.<br>팀과 역할은 관리자가 지정하며, 이 화면의 이름은 개인 화면에서 사용할 닉네임입니다.</p>`;
 }
 function render() {
   if (!authReady) return;
   mobileNavigation.cancel();
   cleanupMeals();
   cleanupNaverUI();
+  cleanupReservations();
+  cleanupBoxMembers();
   renderedHash = location.hash;
   document.body.classList.remove('auth-pending');
   document.body.classList.toggle('logged-out', !session);
@@ -144,22 +183,26 @@ function render() {
       try {
         const result = await api('/api/login', {method:'POST',body:JSON.stringify({username:String(data.get('username')).trim(),password:data.get('password')})});
         session = result.user; csrfToken = result.csrfToken; await loadBootstrap(); resetAdminDraft();
-        location.hash = session.isAdmin ? 'admin' : 'today'; render();
+        location.hash = 'reservations'; render();
       } catch(error) { session = null; bootstrap = null; document.querySelector('#login-error').textContent = error.message; }
       finally { button.disabled = false; button.innerHTML = '로그인 <span>↗</span>'; }
     });
     return;
   }
-  loginRoot.innerHTML = ''; renderShell();
   const [route,date] = location.hash.slice(1).split('/');
-  const allowed = session.pendingApproval ? ['connect'] : session.isAdmin ? ['admin','accounts','naver','board'] : ['today','team','board','record','progress','settings','connect'];
-  const page = !session.isAdmin && route === 'settings' && date === 'naver-success' ? 'connect' : allowed.includes(route) ? route : allowed[0];
+  const page = resolvePage(route, date);
+  loginRoot.innerHTML = ''; renderShell(page);
   document.querySelector('#page-label').textContent = labels[page];
-  document.querySelector('.topbar > span:first-child').firstChild.textContent = session.isAdmin ? 'ADMIN SPACE ' : 'MEMBER SPACE ';
+  document.querySelector('.topbar > span:first-child').firstChild.textContent = session.isAdmin ? '관리자 ' : '레벤 ';
   document.querySelectorAll('[data-page]').forEach(node => { node.classList.toggle('active', node.dataset.page === page); if (node.dataset.page === page) node.setAttribute('aria-current','page'); else node.removeAttribute('aria-current'); });
   mobileNavigation.sync();
   const validDate = date && /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(`${date}T12:00:00`)) && date <= todayKey();
-  app.innerHTML = ({today:todayView,team:()=>mealLoadingView(false),board:()=>mealLoadingView(true),record:()=>recordView(validDate ? date : todayKey()),progress:progressView,settings:settingsView,admin:adminView,accounts:accountsView,naver:naverAdminView,connect:naverOnboardingView})[page]();
+  const views = {reservations:reservationsView, members:boxMembersView,
+    zonda:() => '<div class="page-heading"><h1>존다 프로그램</h1><p class="subtitle">팀별로 식단과 운동을 기록하는 8주 프로그램입니다. 참여를 원하면 박스 관리자에게 참가 등록을 요청해주세요.</p></div><a class="button secondary" href="#reservations">수업 예약으로 돌아가기</a>',
+    today:todayView,team:()=>mealLoadingView(false),board:()=>mealLoadingView(true),record:()=>recordView(validDate ? date : todayKey()),progress:progressView,settings:settingsView,admin:adminView,accounts:accountsView,naver:naverAdminView,connect:naverOnboardingView};
+  app.innerHTML = views[page]();
+  if (page === 'reservations') mountReservations(date);
+  if (page === 'members') mountBoxMembers();
   if (page === 'admin') bindAdmin();
   if (page === 'naver') mountNaverAdmin();
   if (page === 'connect') mountNaverOnboarding();
@@ -190,7 +233,7 @@ window.addEventListener('hashchange', async () => {
   navigationPending = true;
   mobileNavigation.cancel();
   try {
-    const hasDraft = personalIsDirty() || naverIsDirty() || mealsHasUnsaved() || adminIsDirty();
+    const hasDraft = personalIsDirty() || naverIsDirty() || mealsHasUnsaved() || adminIsDirty() || boxMembersIsDirty();
     if (hasDraft) {
       restoreHash();
       const recordDate = document.querySelector('#record-date');
@@ -199,6 +242,7 @@ window.addEventListener('hashchange', async () => {
       if (mealDate && mealPage) mealDate.value = mealPage.date;
       if (personalSaving) { toast('기록을 저장하고 있어요. 저장이 끝난 뒤 이동해주세요.'); return; }
       if (personalIsDirty() && !confirm('저장하지 않은 기록을 버리고 이동할까요?')) return;
+      if (boxMembersIsDirty() && !confirm('회원 등록 화면에서 나가시겠어요?')) return;
       if (naverIsDirty() && !confirm('저장하지 않은 카페 연결 설정을 버리고 이동할까요?')) return;
       if (mealsHasUnsaved() && !await confirmMealDiscard()) return;
       if (adminIsDirty()) {
@@ -207,13 +251,17 @@ window.addEventListener('hashchange', async () => {
       }
       history.replaceState(null, '', `${location.pathname}${location.search}${nextHash}`);
     }
+    if (nextHash === '#zonda' && session && !session.pendingApproval) {
+      try { await loadBootstrap(); }
+      catch (error) { restoreHash(); toast(error.message); return; }
+    }
     render();
   } finally {
     navigationPending = false;
     mobileNavigation.sync();
   }
 });
-window.addEventListener('beforeunload', event => { if(adminIsDirty() || mealsHasUnsaved() || naverIsDirty() || personalIsDirty()) { event.preventDefault(); event.returnValue = ''; } });
+window.addEventListener('beforeunload', event => { if(adminIsDirty() || mealsHasUnsaved() || naverIsDirty() || personalIsDirty() || boxMembersIsDirty()) { event.preventDefault(); event.returnValue = ''; } });
 (async () => {
   try { const result = await api('/api/session'); session = result.user; csrfToken = result.csrfToken || ''; if(session) await loadBootstrap(); }
   catch(error) { session = null; toast('서버에 연결하지 못했습니다. 잠시 후 새로고침해주세요.'); }
