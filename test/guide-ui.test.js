@@ -131,9 +131,28 @@ test('only benchmark detail for a member offers personal benchmark history', () 
   assert.doesNotMatch(ui.guideDetail(find('toes-to-bar'), true), /내 지난 기록/);
 });
 
-test('cards and details use the same layout with facts specific to each guide category', () => {
+test('movement cards lead with the name and keep instructions and equipment in the detail dialog', () => {
   const ui = guideContext();
-  for (const entry of ui.guideEntries()) {
+  const entries = ui.guideEntries().filter(entry => entry.category === 'movement');
+  for (const entry of entries) {
+    const card = ui.guideResultRow(entry);
+    const detail = ui.guideDetail(entry, false, ui.getMovementMotion(entry.id));
+    assert.ok(card.includes('<strong>' + entry.name + '</strong><small lang="en">' + entry.english), entry.id);
+    assert.ok(card.includes('data-guide-entry="' + entry.id + '" aria-haspopup="dialog"'), entry.id);
+    assert.doesNotMatch(card, /guide-card-facts|guide-card-description/, entry.id);
+    assert.equal(card.includes(entry.description), false, entry.id);
+    for (const value of [entry.family, entry.equipment, entry.description, entry.cue, 'data-motion-player']) {
+      if (value) assert.ok(detail.includes(value), entry.id);
+    }
+  }
+  const toes = entries.find(entry => entry.id === 'toes-to-bar');
+  assert.match(ui.guideResultRow(toes), />Toes-to-Bar · T2B<\/small>/);
+  assert.match(ui.guideDetail(toes, false), /Toes-to-Bar · T2B · TTB/);
+});
+
+test('benchmark and term cards keep their summaries and category-specific details', () => {
+  const ui = guideContext();
+  for (const entry of ui.guideEntries().filter(entry => entry.category !== 'movement')) {
     const card = ui.guideResultRow(entry);
     const detail = ui.guideDetail(entry, false);
     assert.match(card, /class="guide-card-name"/, entry.id);
@@ -141,15 +160,13 @@ test('cards and details use the same layout with facts specific to each guide ca
     assert.match(card, /class="guide-card-description"/, entry.id);
     assert.match(detail, /<dl class="guide-summary">/, entry.id);
     if (entry.category === 'benchmark') continue;
-    const values = entry.category === 'movement' ? [entry.family, entry.equipment] : [entry.topic, entry.notation];
+    const values = [entry.topic, entry.notation];
     for (const value of values) assert.ok(value && card.includes(value) && detail.includes(value), entry.id);
     assert.ok(card.includes(entry.description) && detail.includes(entry.description), entry.id);
     if (entry.cue) assert.ok(detail.includes(entry.cue), entry.id);
     if (entry.example) assert.ok(detail.includes(entry.example), entry.id);
   }
   const find = id => ui.guideEntries().find(entry => entry.id === id);
-  assert.match(ui.guideResultRow(find('toes-to-bar')), /체조 · 철봉/);
-  assert.match(ui.guideResultRow(find('thruster')), /스쿼트·프레스 · 바벨/);
   assert.match(ui.guideResultRow(find('amrap')), /운동 방식 · <span lang="en">10-min AMRAP/);
   assert.match(ui.guideDetail(find('amrap'), false), /와드 예시/);
 });

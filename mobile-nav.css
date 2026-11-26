@@ -1,15 +1,28 @@
-.box-return { display: none; }
-body.in-zonda .box-return {
+.topbar:has(.box-return:not([hidden])) {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  gap: 12px;
+  background: var(--bg);
+}
+.box-return:not([hidden]) {
   display: inline-flex;
   align-items: center;
+  gap: 6px;
+  order: -1;
+  flex-shrink: 0;
   min-height: 44px;
-  margin-right: auto;
-  margin-left: clamp(12px, 3vw, 32px);
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
   color: var(--green);
   font-size: 13px;
   font-weight: 700;
   letter-spacing: -.02em;
 }
+.box-return:hover { background: #edf3e8; }
+.topbar:has(.box-return:not([hidden])) .profile { margin-left: auto; }
 .sidebar .nav-mobile-label,
 .sidebar .mobile-nav-indicator {
   display: none;
@@ -26,6 +39,11 @@ body.in-zonda .box-return {
 }
 
 @media (max-width: 580px) {
+  .topbar:has(.box-return:not([hidden])) > span:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   :root {
     --mobile-nav-height: 72px;
     --mobile-nav-bottom: calc(12px + env(safe-area-inset-bottom, 0px));

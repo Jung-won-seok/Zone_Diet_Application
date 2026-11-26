@@ -108,6 +108,9 @@
 .guide-empty { padding: 18px; border-radius: 12px; background: #fff; }
 
 .guide-card-name { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+.guide-movement-row .guide-card-name { display: grid; gap: 2px; }
+.guide-movement-row strong { font-size: 1.125rem; line-height: 1.35; }
+.guide-movement-row small { font-size: .8125rem; line-height: 1.4; }
 .guide-card-facts, .guide-card-description { display: block; font-size: 13px; }
 .guide-card-facts { margin: 6px 0 2px; font-weight: 650; color: var(--green); }
 .guide-card-description { color: #58695e; line-height: 1.45; }

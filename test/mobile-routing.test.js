@@ -6,6 +6,9 @@ const vm = require('node:vm');
 const source = fs.readFileSync(require.resolve('../app.js'), 'utf8');
 const decode = value => String(value || '').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
 const attributes = html => Object.fromEntries([...html.matchAll(/([\w-]+)="([^"]*)"/g)].map(([, key, value]) => [key, decode(value)]));
+const shell = fs.readFileSync(require.resolve('../index.html'), 'utf8');
+const boxReturnAttributes = [...shell.matchAll(/<a\s+([^>]*)>/g)]
+  .map(match => attributes(match[1])).find(link => link.class?.split(/\s+/).includes('box-return'));
 class Element {
   constructor(attrs = {}) {
     this.attrs = attrs; this.value = attrs.value || ''; this.type = attrs.type || ''; this.name = attrs.name || ''; this.dataset = {page:attrs['data-page']}; this.listeners = {}; this.style = {}; this.disabled = false;
@@ -37,6 +40,8 @@ function fixture(hash = '#record/2026-11-10', {isAdmin = false, zondaParticipant
   const body=new Element(), app=new Element(), nav=new Element(), profile=new Element(), settings=new Element({'data-page':'settings'});
   nodes.set('#app',app);nodes.set('.sidebar',new Element());nodes.set('.sidebar nav',nav);nodes.set('.settings-link',settings);nodes.set('.profile',profile);nodes.set('.program-label',new Element());nodes.set('#login-root',new Element());nodes.set('#page-label',new Element());nodes.set('#toast',new Element());
   nodes.set('.topbar > span:first-child',{firstChild:{textContent:''}});
+  const boxReturn = new Element({...boxReturnAttributes});
+  nodes.set('.box-return', boxReturn);
   Object.defineProperty(nav,'innerHTML',{set(html){links.length=0;for(const [,attrs]of html.matchAll(/<a\s+([^>]*)>/g))links.push(new Element(attributes(attrs)));}});
   Object.defineProperty(profile,'innerHTML',{set(){nodes.set('#logout-button',new Element());}});
   Object.defineProperty(app,'innerHTML',{set(html){
@@ -83,7 +88,7 @@ function fixture(hash = '#record/2026-11-10', {isAdmin = false, zondaParticipant
   vm.runInContext(source,ctx);
   ctx.messages=messages;ctx.testAccount=account;
   vm.runInContext("toast=message=>messages.push(message); authReady=true; bootstrap=testAccount; session=bootstrap.user; state=bootstrap.personal; render();",ctx);
-  return {ctx,location,flags,prompts,messages,calls,navState,nodes,body,account,
+  return {ctx,location,flags,prompts,messages,calls,navState,nodes,body,account,boxReturn,
     get pages(){return links.map(link=>link.dataset.page);},
     get markup(){return app.markup;},
     get form(){return form;},get active(){return links.find(e=>e.classList.contains('active'))?.dataset.page||'settings';},
@@ -143,6 +148,7 @@ test('accepted personal discard switches page once and clears old-form dirty sta
 test('booking is the default for box members and Zonda keeps previous participant bookmarks', async () => {
   const f = fixture('');
   assert.equal(f.active, 'reservations');
+  assert.equal(f.boxReturn.hidden, true);
   assert.deepEqual(f.pages, ['reservations', 'wod', 'guide', 'zonda']);
   await f.navigate('#reservations/2027-01-04');
   assert.equal(f.navState.bookingDate, '2027-01-04');
@@ -150,15 +156,15 @@ test('booking is the default for box members and Zonda keeps previous participan
   assert.equal(f.calls.at(-1).url, '/api/bootstrap');
   assert.equal(f.active, 'today');
   assert.equal(f.body.classList.contains('in-zonda'), true);
+  assert.equal(f.boxReturn.hidden, false);
   await f.navigate('#record/2026-11-10');
   assert.equal(f.active, 'record');
   assert.equal(f.field('date').value, '2026-11-10');
-  const shell = fs.readFileSync(require.resolve('../index.html'), 'utf8');
-  const backLink = [...shell.matchAll(/<a\s+([^>]*)>/g)]
-    .map(match => attributes(match[1])).find(link => link.class?.split(/\s+/).includes('box-return'));
-  assert.equal(backLink?.href, '#reservations');
-  await f.navigate(backLink.href);
+  assert.equal(f.boxReturn.getAttribute('href'), '#reservations/2027-01-04');
+  await f.navigate(f.boxReturn.getAttribute('href'));
   assert.equal(f.active, 'reservations');
+  assert.equal(f.navState.bookingDate, '2027-01-04');
+  assert.equal(f.boxReturn.hidden, true);
   assert.equal(f.body.classList.contains('in-zonda'), false);
 });
 
@@ -172,7 +178,11 @@ test('box-only members can open Zonda information and gain access after enrollme
   assert.equal(f.body.classList.contains('in-box'), true);
   await f.navigate('#zonda');
   assert.equal(f.active, 'zonda');
-  assert.match(f.markup, /href="#reservations"/);
+  assert.equal(f.boxReturn.hidden, false);
+  assert.equal(f.boxReturn.getAttribute('href'), '#guide');
+  await f.navigate(f.boxReturn.getAttribute('href'));
+  assert.equal(f.active, 'guide');
+  assert.equal(f.boxReturn.hidden, true);
   assert.equal(f.body.classList.contains('in-box'), true);
   await f.navigate('#record/2026-11-10');
   assert.equal(f.active, 'reservations');
@@ -198,12 +208,31 @@ test('administrators manage the box and Zonda separately; unapproved applicants 
   assert.equal(f.active, 'admin');
   assert.equal(f.body.classList.contains('in-zonda'), true);
   assert.ok(f.pages.includes('accounts'));
+  await f.navigate('#accounts');
+  assert.equal(f.boxReturn.hidden, false);
+  await f.navigate(f.boxReturn.getAttribute('href'));
+  assert.equal(f.active, 'members');
   const pending = fixture('#reservations', {zondaParticipant: false, pendingApproval: true});
   assert.deepEqual(pending.pages, ['connect']);
   assert.equal(pending.active, 'connect');
+  assert.equal(pending.boxReturn.hidden, true);
   await pending.navigate('#guide');
   assert.equal(pending.active, 'connect');
   assert.equal(pending.navState.guideMounted, undefined);
+});
+
+test('a direct Zonda link returns to the box landing and respects unsaved program records', async () => {
+  const f = fixture('#record/2026-11-10');
+  assert.equal(f.boxReturn.hidden, false);
+  assert.equal(f.boxReturn.getAttribute('href'), '#reservations');
+  f.field('weight').value = '71.5';
+  await f.navigate(f.boxReturn.getAttribute('href'));
+  assert.equal(f.active, 'record');
+  assert.equal(f.field('weight').value, '71.5');
+  f.flags.answer = true;
+  await f.navigate(f.boxReturn.getAttribute('href'));
+  assert.equal(f.active, 'reservations');
+  assert.equal(f.boxReturn.hidden, true);
 });
 
 test('members outside Zonda can open a WOD and preserve an unsaved result when declining a date change', async () => {

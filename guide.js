@@ -9,9 +9,9 @@ function guideEntries() {
   return Object.entries(catalog).flatMap(([category, entries]) => entries.map(entry => ({ ...entry, category })));
 }
 
-function guideEnglishLabel(entry) {
+function guideEnglishLabel(entry, abbreviationLimit = Infinity) {
   const abbreviations = entry.aliases.filter(name => /^[A-Z][A-Z0-9&/+ -]{1,8}$/.test(name) && name !== entry.english);
-  return [entry.english, ...abbreviations].join(' · ');
+  return [entry.english, ...abbreviations.slice(0, abbreviationLimit)].join(' · ');
 }
 
 function benchmarkSummary(entry) {
@@ -41,12 +41,16 @@ function guideFactValue(fact) {
 }
 
 function guideResultRow(entry) {
-  const facts = guideFacts(entry).map(guideFactValue).join(' · ');
-  const description = entry.category === 'benchmark' ? entry.steps.map(step => step.name).join(' · ') : entry.description;
-  return `<li><button type="button" class="guide-row" data-guide-entry="${escapeHTML(entry.id)}" aria-haspopup="dialog">
-      <span><span class="guide-card-name"><strong>${escapeHTML(entry.name)}</strong><small lang="en">${escapeHTML(guideEnglishLabel(entry))}</small></span>
-        <span class="guide-card-facts">${facts}</span>
-        <span class="guide-card-description">${escapeHTML(description)}</span></span>
+  const isMovement = entry.category === 'movement';
+  const english = guideEnglishLabel(entry, isMovement ? 1 : Infinity);
+  let summary = '';
+  if (!isMovement) {
+    const facts = guideFacts(entry).map(guideFactValue).join(' · ');
+    const description = entry.category === 'benchmark' ? entry.steps.map(step => step.name).join(' · ') : entry.description;
+    summary = `<span class="guide-card-facts">${facts}</span><span class="guide-card-description">${escapeHTML(description)}</span>`;
+  }
+  return `<li><button type="button" class="guide-row${isMovement ? ' guide-movement-row' : ''}" data-guide-entry="${escapeHTML(entry.id)}" aria-haspopup="dialog">
+      <span><span class="guide-card-name"><strong>${escapeHTML(entry.name)}</strong><small lang="en">${escapeHTML(english)}</small></span>${summary}</span>
       <span aria-hidden="true" class="guide-chevron">›</span></button></li>`;
 }
 

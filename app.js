@@ -107,6 +107,13 @@ function renderShell(page) {
   const inBox = ['reservations','wod','guide','members','zonda'].includes(page);
   document.body.classList.toggle('in-box', inBox);
   document.body.classList.toggle('in-zonda', !inBox && !session.pendingApproval);
+  const boxReturn = document.querySelector('.box-return');
+  const onBoxPage = inBox && page !== 'zonda';
+  boxReturn.hidden = onBoxPage || Boolean(session.pendingApproval);
+  if (onBoxPage) {
+    const boxHash = '#' + page;
+    boxReturn.setAttribute('href', location.hash.split('/')[0] === boxHash ? location.hash : boxHash);
+  }
   let routes;
   if (inBox) {
     routes = [['reservations','수업 예약','수업 예약'],['wod','오늘의 와드','와드'],['guide','크로스핏 가이드','가이드']];
@@ -185,6 +192,7 @@ function render() {
   document.body.classList.remove('auth-pending');
   document.body.classList.toggle('logged-out', !session);
   const loginRoot = document.querySelector('#login-root');
+  if (!session) document.querySelector('.box-return').setAttribute('href', '#reservations');
   if (showAccountRecovery(loginRoot)) {
     document.body.classList.add('logged-out');
     app.innerHTML = '';
@@ -218,7 +226,7 @@ function render() {
   mobileNavigation.sync();
   const validDate = date && /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(`${date}T12:00:00`)) && date <= todayKey();
   const views = {reservations:reservationsView, wod:wodView, guide:guideView, members:boxMembersView,
-    zonda:() => '<div class="page-heading"><h1>존다 프로그램</h1><p class="subtitle">팀별로 식단과 운동을 기록하는 8주 프로그램입니다. 참여를 원하면 박스 관리자에게 참가 등록을 요청해주세요.</p></div><a class="button secondary" href="#reservations">수업 예약으로 돌아가기</a>',
+    zonda:() => '<div class="page-heading"><h1>존다 프로그램</h1><p class="subtitle">팀별로 식단과 운동을 기록하는 8주 프로그램입니다. 참여를 원하면 박스 관리자에게 참가 등록을 요청해주세요.</p></div>',
     today:todayView,team:()=>mealLoadingView(false),board:()=>mealLoadingView(true),record:()=>recordView(validDate ? date : todayKey()),progress:progressView,settings:settingsView,admin:adminView,accounts:accountsView,naver:naverAdminView,connect:naverOnboardingView};
   app.innerHTML = views[page]();
   if (page === 'reservations') {
