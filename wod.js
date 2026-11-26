@@ -39,7 +39,8 @@ async function mountWodPreview(date) {
   preview.className = 'wod-preview';
   preview.setAttribute('aria-label', '선택한 날짜의 와드');
   preview.addEventListener('click', wodGuideClick);
-  schedule.before(preview);
+  const utilities = document.querySelector('.booking-utilities');
+  (utilities || schedule).before(preview);
   const link = document.createElement('a');
   link.href = validBookingDate(date) ? '#wod/' + date : '#wod';
   link.textContent = '와드 보기 →';

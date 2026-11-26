@@ -10,29 +10,29 @@
 .motion-modes, [data-motion-modes] {
   display: inline-flex;
   gap: 2px;
-  padding: 2px;
-  background: #e9efe7;
-  border-radius: 10px;
+  padding: 3px;
+  background: #e9ede6;
+  border-radius: 999px;
 }
 .motion-player [data-motion-mode] {
   min-width: 44px;
   min-height: 36px;
   padding: 4px 10px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 999px;
   background: transparent;
-  color: #435c4c;
+  color: var(--ink);
   font-size: 13px;
   line-height: 1.2;
   font-weight: 650;
 }
 .motion-player [data-motion-mode][aria-pressed="true"] {
-  background: var(--green);
+  background: #262c27;
   color: white;
 }
 .motion-camera {
   padding: 9px 14px;
-  background: #f5f8f1;
+  background: #f5f6f2;
   border-top: 1px solid var(--line);
 }
 .motion-camera[hidden] { display: none; }
@@ -45,19 +45,19 @@
   min-width: 44px;
   min-height: 36px;
   padding: 5px 9px;
-  border: 1px solid #cfdbce;
-  border-radius: 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
   background: white;
-  color: #405a49;
+  color: var(--ink);
   font-size: 13px;
   line-height: 1.25;
   font-weight: 650;
 }
 .motion-camera-views button { flex: 1 1 auto; }
 .motion-camera-views button[aria-pressed="true"] {
-  border-color: #658361;
-  background: #e3efd9;
-  color: #254b30;
+  border-color: #333a34;
+  background: #303632;
+  color: white;
 }
 .motion-camera-tools {
   display: flex;

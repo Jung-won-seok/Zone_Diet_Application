@@ -5,8 +5,8 @@
 .motion-player h3 { margin: 0 0 8px; }
 .motion-card {
   overflow: hidden;
-  border: 1px solid #cfdbce;
-  border-radius: 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
   background: white;
 }
 .motion-card canvas {
@@ -17,8 +17,9 @@
   background: #f1f5ec;
 }
 .motion-controls {
-  padding: 10px 14px 3px;
-  border-top: 1px solid var(--line);
+  padding: 12px 14px 4px;
+  background: #202421;
+  color: #f7f8f5;
 }
 .motion-toolbar {
   display: grid;
@@ -35,7 +36,7 @@
 }
 .motion-toolbar button, .motion-rates button, .motion-phases button {
   min-height: 44px;
-  border-radius: 8px;
+  border-radius: 999px;
   font-weight: 650;
 }
 .motion-play {
@@ -45,20 +46,20 @@
   gap: 7px;
   padding: 6px 13px;
   white-space: nowrap;
-  color: #fff;
-  background: var(--green);
+  color: #1e281a;
+  background: var(--lime);
 }
 .motion-play [data-motion-icon] {
   width: 14px;
-  color: var(--lime);
+  color: inherit;
   font-size: 12px;
   text-align: center;
 }
 .motion-rate, .motion-rates button {
   padding: 6px 9px;
-  border: 1px solid #cbd6c8;
-  color: var(--green);
-  background: white;
+  border: 1px solid #626a61;
+  color: #fafbf8;
+  background: #303632;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -86,35 +87,38 @@
   padding-inline: 4px;
 }
 .motion-rates button[aria-pressed="true"] {
-  color: white;
-  background: var(--green);
+  color: #1e281a;
+  background: var(--lime);
+  border-color: var(--lime);
 }
 .motion-rate[aria-expanded="true"] {
-  background: #e7efdf;
+  border-color: var(--lime);
+}
+.motion-controls button:focus-visible, .motion-timeline input:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 2px;
 }
 .motion-timeline {
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: center;
   margin-top: 10px;
-  color: #536759;
+  color: #d0d6cd;
   font-size: 12px;
 }
 .motion-clock { font-variant-numeric: tabular-nums; }
-.motion-clock b { color: var(--green); }
+.motion-clock b { color: #fff; }
 .motion-timeline input {
   grid-column: 1 / -1;
   width: 100%;
   min-width: 0;
   height: 40px;
   margin: 0;
-  accent-color: var(--green);
+  accent-color: var(--lime);
   cursor: pointer;
   touch-action: pan-y;
 }
 .motion-timeline input:focus-visible {
-  outline: 2px solid var(--green);
-  outline-offset: 1px;
   border-radius: 5px;
 }
 .motion-phases {
@@ -127,14 +131,14 @@
   padding: 6px 10px;
   border: 1px solid var(--line);
   background: white;
-  color: #405a49;
+  color: var(--ink);
   font-size: 12px;
   line-height: 1.4;
 }
 .motion-phases button[aria-current="step"] {
-  border-color: #6a8963;
-  background: #edf5e4;
-  color: #234930;
+  border-color: #343b35;
+  background: #303632;
+  color: #fff;
 }
 @media (max-width: 380px) {
   .motion-toolbar { gap: 6px; }

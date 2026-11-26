@@ -1,27 +1,27 @@
 .wod-stack {
-  max-width: 800px;
+  max-width: 1120px;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
 }
 
 .wod-preview {
-  max-width: 960px;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px 18px;
-  padding: 16px 20px;
-  margin-bottom: 14px;
-  background: #eef4e9;
-  border: 1px solid var(--line);
-  border-radius: 16px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 20px;
+  min-width: 0;
+  padding: clamp(20px, 2.3vw, 30px);
+  background: #e5f3c6;
+  color: #1e271b;
+  border: 1px solid #d3dfbc;
+  border-radius: var(--radius);
 }
 
 .wod-preview h2 {
   font-size: 13px;
-  color: var(--green);
-  margin: 0 0 4px;
+  color: #46583a;
+  margin: 0 0 12px;
 }
 
 .wod-preview p {
@@ -30,12 +30,18 @@
   overflow-wrap: anywhere;
 }
 
-.wod-preview > div { flex: 1 1 220px; min-width: 0; }
+.wod-preview > div { min-width: 0; max-width: 100%; }
+.wod-preview h2 + p {
+  font-size: clamp(18px, 2vw, 26px);
+  line-height: 1.3;
+  letter-spacing: -.04em;
+  word-break: keep-all;
+}
 .wod-preview .wod-preview-plan {
   color: var(--ink);
   white-space: pre-line;
   font-weight: 400;
-  margin-top: 4px;
+  margin-top: 8px;
 }
 .wod-preview .wod-preview-result {
   font-size: 13px;
@@ -49,11 +55,30 @@
   font-weight: 650;
 }
 
-.wod-preview a { padding: 8px 0; }
+.wod-preview > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-top: auto;
+  padding: 6px 16px;
+  border-radius: 999px;
+  background: #253123;
+  color: #fff;
+  font-size: 13px;
+}
 .wod-stack h2 { font-size: 20px; margin: 0; }
 .wod-form { display: grid; gap: 16px; }
-.wod-form .field { min-width: 0; }
+.wod-form .field { min-width: 0; margin-block: 0; }
 .wod-form textarea { resize: vertical; }
+.wod-form select {
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--ink);
+  background-color: #f6f7f3;
+  font: inherit;
+}
 
 .wod-toolbar, .wod-toolbar label, .wod-weight {
   display: flex;
@@ -61,13 +86,21 @@
   gap: 10px;
 }
 
-.wod-toolbar { flex-wrap: wrap; }
+.wod-toolbar {
+  flex-wrap: wrap;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+}
 .wod-toolbar label { font-weight: 650; font-size: 14px; }
 .wod-toolbar input {
+  min-height: 44px;
   color: var(--ink);
-  background: white;
+  background: #f6f7f3;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 8px 10px;
   font: inherit;
 }
@@ -81,11 +114,22 @@
 .wod-weight { gap: 6px; }
 .wod-weight input { min-width: 0; flex: 1; }
 .wod-weight select { width: 4.5rem; }
-.wod-sheet { border-left: 4px solid var(--green); }
-.wod-sheet p { white-space: pre-wrap; line-height: 1.7; }
+.wod-stack .wod-sheet {
+  background: #202421;
+  color: #f7f8f5;
+}
+.wod-sheet h2 {
+  color: var(--lime);
+  font-size: clamp(28px, 4vw, 44px);
+  line-height: 1.1;
+  letter-spacing: -.05em;
+}
+.wod-sheet p { color: #e1e6de; white-space: pre-wrap; line-height: 1.7; }
+.wod-sheet .wod-guide-term { color: inherit; text-decoration-color: #98aa8a; text-decoration-thickness: 1px; }
+.wod-sheet .wod-guide-term:focus-visible { outline: 2px solid var(--lime); outline-offset: 2px; }
 .wod-sheet p, .wod-prior p { margin: 10px 0 0; }
 .wod-sheet, .wod-prior, .wod-history, .wod-feedback { overflow-wrap: anywhere; }
-.wod-prior strong { display: block; margin-top: 6px; }
+.wod-prior strong { display: block; margin-top: 8px; font-size: 20px; font-variant-numeric: tabular-nums; }
 .wod-note, .wod-feedback { color: var(--green); }
 .wod-feedback p { margin: 0 0 6px; }
 .wod-feedback p:empty { margin: 0; }
@@ -100,8 +144,15 @@
 .wod-history button { margin-top: 12px; }
 .wod-stack [hidden] { display: none; }
 
+@media (min-width: 1000px) {
+  .wod-stack:has(.wod-sheet) { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+  .wod-stack > * { grid-column: 1 / -1; }
+  .wod-stack > .wod-sheet, .wod-stack > .wod-prior { grid-column: auto; }
+}
+
 @media (max-width: 580px) {
-  .wod-preview { padding: 14px 16px; }
+  .wod-preview { padding: 18px; gap: 12px; }
+  .wod-toolbar { padding: 10px 12px; }
   .wod-field-grid { grid-template-columns: 1fr; }
   .wod-toolbar label { flex-wrap: wrap; }
 }

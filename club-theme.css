@@ -1,0 +1,199 @@
+body {
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+  letter-spacing: -.025em;
+}
+
+.brand, .login-story .brand {
+  gap: 12px;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -.05em;
+}
+.brand small, .login-story .brand small {
+  margin-top: 6px;
+  color: #c3cfc8;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .2em;
+}
+.brand-mark, .login-story .brand-mark {
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  background: var(--lime);
+  color: var(--graphite);
+  font-style: italic;
+  font-size: 26px;
+}
+.brand-mark span { margin-left: -1px; }
+
+.topbar {
+  height: 68px;
+  border-color: var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0;
+}
+.topbar #page-label { color: var(--ink); font-weight: 650; }
+.profile .avatar {
+  background: var(--graphite);
+  color: var(--lime);
+  font-size: 10px;
+}
+.profile #logout-button {
+  padding: 6px 12px;
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--white);
+  font-size: 11px;
+}
+.box-return:not([hidden]) { border-radius: 999px; }
+
+h1 { font-size: clamp(30px, 3vw, 44px); line-height: 1.16; letter-spacing: -.065em; }
+.page-heading .subtitle { margin-top: 8px; }
+.subtitle, .stat-note { color: var(--muted); }
+.card, .stat { border-color: var(--line); box-shadow: 0 2px 5px rgb(21 32 25 / 3%); }
+.button { background: var(--graphite); border-radius: 12px; font-weight: 700; }
+.button.lime { background: var(--lime); color: var(--graphite); }
+.button.secondary { background: #edf0ea; color: var(--ink); }
+.button.text { color: var(--green); }
+.field input, .field textarea {
+  border-color: var(--line);
+  background: #f8f9f6;
+  border-radius: 12px;
+}
+.field input:focus, .field textarea:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px #d9e8c8;
+}
+.field label { color: var(--ink); font-weight: 650; }
+.badge { background: #e9efe3; color: #3a5143; }
+:focus-visible { outline: 3px solid #548448; outline-offset: 3px; }
+
+/* Give sign-in the same identity as the booking board. */
+.login-shell {
+  max-width: 1680px;
+  margin: auto;
+  padding: clamp(16px, 2.4vw, 40px);
+  grid-template-columns: minmax(0, 1.12fr) minmax(0, .88fr);
+  gap: clamp(22px, 4vw, 72px);
+}
+.login-story {
+  background: linear-gradient(0deg, rgb(11 17 16 / 87%), transparent 72%),
+    linear-gradient(90deg, rgb(11 17 16 / 30%), transparent 80%),
+    var(--graphite) url("./leben-training.png") 68% center / cover no-repeat;
+  color: white;
+  min-height: clamp(540px, 80vh, 960px);
+  border-radius: 26px;
+  padding: clamp(24px, 4vw, 62px);
+}
+.login-story h1 {
+  max-width: 13ch;
+  margin: 0 0 16px;
+  font-size: clamp(38px, 4.4vw, 74px);
+  letter-spacing: -.075em;
+  line-height: 1.14;
+  word-break: keep-all;
+}
+.login-story p { color: #e8edea; word-break: keep-all; }
+.login-panel { width: min(100%, 420px); }
+.login-panel h2 { font-size: clamp(27px, 2.4vw, 38px); }
+.login-panel input { min-height: 48px; }
+.login-panel .button {
+  min-height: 48px;
+  background: var(--lime);
+  color: var(--graphite);
+}
+.legacy-login { margin-top: 18px; }
+
+@media (min-width: 581px) {
+  .sidebar {
+    padding-inline: clamp(14px, 1.7vw, 28px);
+    background: var(--graphite);
+    border: 0;
+    color: white;
+    overflow-y: auto;
+  }
+  .sidebar .brand { align-self: start; margin-left: 5px; }
+  .sidebar .program-label {
+    margin: clamp(35px, 6vh, 62px) 0 10px;
+    padding: 17px 13px 0;
+    border-top: 1px solid #39433f;
+    color: #adb8b0;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .sidebar nav { gap: 5px; }
+  .sidebar nav a, .sidebar .settings-link {
+    align-items: center;
+    gap: 12px;
+    min-height: 45px;
+    padding: 11px 13px;
+    border-radius: 12px;
+    color: #d4dcd5;
+    font-size: 14px;
+    font-weight: 550;
+  }
+  .sidebar .settings-link { margin: auto 0 0; }
+  .sidebar .nav-icon { display: inline-flex; justify-content: center; }
+  .sidebar nav a:hover, .sidebar .settings-link:hover { background: #2c3933; color: white; }
+  .sidebar nav a.active, .sidebar .settings-link.active {
+    background: var(--lime);
+    color: var(--graphite);
+    font-weight: 750;
+  }
+  .sidebar :focus-visible { outline-color: var(--lime); }
+}
+
+@media (max-width: 580px) {
+  main {
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+  }
+  .topbar {
+    height: calc(54px + env(safe-area-inset-top, 0px));
+    padding-top: env(safe-area-inset-top, 0px);
+    font-size: 10px;
+  }
+  .topbar #page-label { font-size: 11px; }
+  #app { padding-top: 20px; }
+  :root { --mobile-nav-height: 64px; }
+  body .sidebar {
+    color: #edf1e9;
+    background: var(--graphite);
+    border-color: #33423b;
+    box-shadow: 0 7px 22px rgb(19 30 23 / 22%);
+  }
+  body .sidebar nav a, body .sidebar .settings-link { color: #d2dbd4; }
+  body .sidebar nav a.active, body .sidebar .settings-link.active,
+  body .sidebar.is-dragging nav a.drag-preview, body .sidebar.is-dragging .settings-link.drag-preview {
+    background: var(--lime);
+    color: var(--graphite);
+  }
+  body .sidebar.has-nav-indicator .mobile-nav-indicator { background: var(--lime); }
+  body .sidebar.is-dragging nav a, body .sidebar.is-dragging .settings-link { color: #d2dbd4; }
+  body .sidebar.has-nav-indicator nav a.active, body .sidebar.has-nav-indicator .settings-link.active,
+  body .sidebar.has-nav-indicator .drag-preview { background: transparent; }
+  body .sidebar nav a:focus-visible, body .sidebar .settings-link:focus-visible { outline-color: #9ab886; }
+  .login-shell { padding: max(12px, env(safe-area-inset-top)) 12px max(24px, env(safe-area-inset-bottom)); }
+  .login-story {
+    min-height: 198px;
+    padding: 22px;
+    border-radius: 20px;
+    background-position: center, center, 70% 43%;
+  }
+  .login-story .brand { font-size: 16px; gap: 9px; }
+  .login-story .brand-mark { width: 32px; height: 32px; font-size: 21px; border-radius: 9px; }
+  .login-story .brand small { margin-top: 4px; font-size: 7px; }
+  .login-story h1 { margin-bottom: 8px; font-size: 34px; }
+  .login-story p { font-size: 12px; line-height: 1.55; }
+  .login-panel { padding: 26px 12px; }
+}
+
+@media (min-width: 1150px) {
+  #box-member-management {
+    grid-template-columns: minmax(240px, .68fr) minmax(0, 1.5fr);
+    align-items: start;
+  }
+}

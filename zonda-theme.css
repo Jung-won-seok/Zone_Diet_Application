@@ -1,0 +1,198 @@
+/* Zonda uses the same surfaces as the box, with one dark focal tile per dashboard. */
+.in-zonda .hero,
+.in-zonda .program-strip,
+.in-zonda .board-banner {
+  min-width: 0;
+  padding: clamp(22px, 3vw, 40px);
+  border: 1px solid var(--graphite);
+  border-radius: var(--radius);
+  background: var(--graphite);
+  color: #fff;
+}
+.in-zonda .hero { align-items: center; }
+.in-zonda .hero h2,
+.in-zonda .program-strip h2,
+.in-zonda .board-banner h2 {
+  color: #fff;
+  font-size: clamp(23px, 2.35vw, 36px);
+  line-height: 1.25;
+  letter-spacing: -.055em;
+  word-break: keep-all;
+}
+.in-zonda .hero p,
+.in-zonda .program-strip p,
+.in-zonda .board-banner p {
+  color: #d5ddd7;
+  font-size: 13px;
+  line-height: 1.65;
+}
+.in-zonda .program-strip .eyebrow,
+.in-zonda .board-banner .eyebrow { color: var(--lime); }
+.in-zonda .hero .button.lime { background: var(--lime); color: var(--graphite); }
+.in-zonda .hero-art {
+  width: clamp(85px, 11vw, 160px);
+  aspect-ratio: 1;
+  align-self: center;
+  border-radius: 50%;
+  background: conic-gradient(var(--lime) var(--checkin-progress, 0%), #39433e 0);
+  isolation: isolate;
+}
+.in-zonda .hero-art::before {
+  content: "";
+  display: block;
+  position: absolute;
+  inset: clamp(4px, .55vw, 8px);
+  width: auto;
+  height: auto;
+  border: 0;
+  border-radius: 50%;
+  background: var(--graphite);
+  z-index: -1;
+}
+.in-zonda .hero-art::after { content: none; }
+.in-zonda .hero-number,
+.in-zonda .program-numbers strong,
+.in-zonda .board-count strong {
+  color: var(--lime);
+  font-size: clamp(30px, 3.3vw, 50px);
+  line-height: 1.05;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.in-zonda .hero-number span,
+.in-zonda .board-count small { font-size: .46em; color: #d5ddd7; }
+.in-zonda .hero-art small,
+.in-zonda .program-numbers span,
+.in-zonda .board-count > span { color: #d5ddd7; font-size: 11px; }
+.in-zonda .hero-art small { margin-top: 6px; letter-spacing: 0; }
+
+.in-zonda .member-team-banner,
+.in-zonda .stat,
+.in-zonda .team-summary,
+.in-zonda .meal-member-list > .meal-member-row {
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.in-zonda .member-team-banner { padding: 18px 20px; }
+.in-zonda .member-team-banner strong { font-size: 15px; }
+.in-zonda .member-team-banner small { font-size: 12px; }
+.in-zonda .member-team-banner > span:last-child { font-size: 12px; font-weight: 650; color: var(--ink); }
+
+.in-zonda .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.in-zonda .stat-value {
+  font-size: clamp(26px, 3vw, 42px);
+  line-height: 1.1;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.in-zonda .stat-label { color: var(--ink); font-weight: 600; }
+.in-zonda .stat-label span:last-child { display: none; }
+.in-zonda .stat-value small,
+.in-zonda .stat-note,
+.in-zonda .chart-bottom { color: var(--muted); }
+.in-zonda .stat-note { font-size: 11px; line-height: 1.55; word-break: keep-all; }
+.in-zonda .task-symbol { background: #edf1ed; color: var(--green); }
+.in-zonda .task-text strong { font-size: 14px; }
+.in-zonda .task-text p { color: var(--muted); font-size: 12px; }
+.in-zonda .task-status.done { background: var(--lime); color: var(--graphite); border-color: var(--lime); }
+.in-zonda .empty-chart p { color: var(--muted); }
+.in-zonda .chart svg > path { stroke: var(--line); }
+.in-zonda .chart svg > polygon { fill: #eaf5d9; }
+.in-zonda .chart svg > polyline { stroke: #547a32; }
+.in-zonda .chart svg > circle { fill: #365726; }
+
+.in-zonda .helper-card { background: #eaf4dc; }
+.in-zonda .helper-card p,
+.in-zonda .helper-card .large-symbol { color: #33482d; }
+.in-zonda .team-summary { color: var(--ink); }
+.in-zonda .team-summary h3 { font-size: 15px; }
+.in-zonda .team-summary p,
+.in-zonda .save-bar span { font-size: 11px; color: var(--muted); }
+.in-zonda .team-summary.selected {
+  border-color: var(--green);
+  background: #eef7df;
+  box-shadow: inset 0 0 0 1px var(--green);
+}
+.in-zonda .save-bar { border-color: var(--line); }
+.in-zonda .preset-picker,
+.in-zonda .photo-record-link,
+.in-zonda .team-role-details,
+.in-zonda .meal-block-fields,
+.in-zonda .cafe-publish-panel { background: #f3f5f1; border-color: var(--line); color: var(--ink); }
+.in-zonda .photo-record-link small,
+.in-zonda .preset-picker p,
+.in-zonda .meal-block-fields > p { color: var(--muted); }
+
+.in-zonda .meal-tabs {
+  background: #e9ece8;
+  padding: 4px;
+  gap: 2px;
+  border-radius: 14px;
+}
+.in-zonda .meal-tabs button {
+  min-height: 42px;
+  border-radius: 11px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.in-zonda .meal-tabs button.active { background: var(--graphite); color: #fff; }
+.in-zonda .daily-block-totals > div { background: #f1f4ee; border-color: var(--line); }
+.in-zonda .daily-block-totals strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+.in-zonda .daily-block-totals > div > span,
+.in-zonda .daily-block-totals strong small,
+.in-zonda .daily-block-totals p,
+.in-zonda .daily-block-footer p { color: var(--muted); }
+.in-zonda .meal-share-strip { background: #edf6df; border-color: #d5e5c1; }
+.in-zonda .meal-share-strip p,
+.in-zonda .meal-share-strip .share-meta { color: #435939; }
+.in-zonda .meal-dialog {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--ink);
+  background: #fff;
+}
+.in-zonda .meal-dialog::backdrop { background: rgb(12 18 15 / 55%); }
+
+@media (hover: hover) {
+  .in-zonda .member-team-banner:hover,
+  .in-zonda .team-summary:hover { border-color: #80937b; }
+}
+
+@media (min-width: 1180px) {
+  .in-zonda #app:has(> .member-team-banner + .hero) {
+    display: grid;
+    grid-template-columns: minmax(0, 1.8fr) minmax(240px, 1fr);
+    gap: 18px;
+    align-content: start;
+  }
+  .in-zonda #app:has(> .member-team-banner + .hero) > :is(.page-heading, .member-team-banner, .hero, .stats) { margin: 0; }
+  .in-zonda .member-team-banner { align-self: center; }
+  .in-zonda .hero + .stats { grid-template-columns: 1fr; gap: 10px; }
+  .in-zonda .hero + .stats .stat {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-content: center;
+    align-items: center;
+    gap: 4px 10px;
+    padding: 16px 20px;
+  }
+  .in-zonda .hero + .stats .stat-value { grid-column: 2; grid-row: 1 / 3; margin: 0; }
+  .in-zonda .hero + .stats .stat-note { grid-column: 1; }
+  .in-zonda #app > .stats + .columns { grid-column: 1 / -1; }
+}
+
+@media (max-width: 580px) {
+  .in-zonda .hero { grid-template-columns: minmax(0, 1fr) auto; gap: 12px; padding: 20px 16px; }
+  .in-zonda .hero h2 { font-size: 21px; }
+  .in-zonda .hero p { font-size: 12px; }
+  .in-zonda .hero .button { min-height: 44px; font-size: 12px; }
+  .in-zonda .stats { gap: 6px; }
+  .in-zonda .stat { padding: 14px 9px; border-radius: 14px; }
+  .in-zonda .stat-label { font-size: 11px; }
+  .in-zonda .stat-value { margin: 9px 0 6px; }
+  .in-zonda .member-team-banner { padding: 15px; }
+  .in-zonda .meal-tabs button { min-height: 44px; padding-inline: 18px; }
+  .in-zonda .program-numbers { padding: 0; gap: 10px; }
+}

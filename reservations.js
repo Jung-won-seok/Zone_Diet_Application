@@ -20,10 +20,13 @@ function shiftBookingDate(date, days) {
 }
 
 function reservationsView() {
-  return `<div class="box-schedule-heading"><h1>수업 예약</h1>
-    <p>예약은 수업 전날 00:00(한국 시간)에 열립니다. 대기 신청을 포함해 하루 한 수업만 신청할 수 있습니다.</p>
-    <p>확정자가 취소하면 대기 순서대로 자동 승격됩니다.</p></div>
-    <div id="booking-notifications"></div><div id="coach-schedule"></div><div id="box-schedule"></div>`;
+  return `<div class="booking-dashboard"><header class="box-schedule-heading">
+      <h1>수업 예약</h1>
+      <p>수업 전날 <strong>00:00</strong>에 예약이 열려요. <small>한국 시간 기준</small></p>
+      <p>대기 포함 하루 한 수업을 신청할 수 있어요.<br>취소 자리는 대기 순서대로 확정돼요.</p>
+    </header>
+    <div class="booking-utilities"><div id="booking-notifications"></div><div id="coach-schedule"></div></div>
+    <div id="box-schedule"></div></div>`;
 }
 
 function cleanupReservations() {
@@ -63,7 +66,7 @@ function bookingRoster(slot) {
     ? '<ol>' + group.map(member => `<li>${escapeHTML(member.name)}</li>`).join('') + '</ol>'
     : `<p>${empty}</p>`;
   return `<details class="booking-roster" data-roster="${escapeHTML(slot.startTime)}">
-    <summary>명단 보기</summary><div class="booking-roster-lists">
+    <summary aria-label="${escapeHTML(slot.startTime)} 수업 명단 보기">명단 보기</summary><div class="booking-roster-lists">
     <div><h3>예약 확정 ${slot.confirmedCount}명</h3>${names(slot.confirmed, '예약자가 없습니다.')}</div>
     <div><h3>대기 순번 ${slot.waitlistCount}명</h3>${names(slot.waiting, '대기자가 없습니다.')}</div></div></details>`;
 }
@@ -154,7 +157,8 @@ function bookingClassRow(slot, isAdmin, booked, membership, date, dayReason) {
     ${special}
     <div class="booking-row-main">
       <div class="booking-time"><strong>${escapeHTML(slot.startTime)}</strong><span>– ${escapeHTML(slot.endTime)}</span></div>
-      <div class="booking-occupancy"><span>예약 <b>${slot.confirmedCount}</b> / ${slot.capacity}</span><span>대기 <b>${slot.waitlistCount}</b> / ${slot.waitlistCapacity}</span></div>
+      <div class="booking-occupancy"><span>예약 <b>${slot.confirmedCount}</b> / ${slot.capacity}</span><span>대기 <b>${slot.waitlistCount}</b> / ${slot.waitlistCapacity}</span>
+        <meter class="booking-capacity" aria-hidden="true" min="0" max="${escapeHTML(slot.capacity)}" value="${escapeHTML(slot.confirmedCount)}"></meter></div>
       <div class="booking-state"><span>${status}</span></div>
       ${action}</div>${reason}${isAdmin && !slot.cancelled ? bookingRoster(slot) : ''}</li>`;
 }
@@ -178,8 +182,9 @@ function paintReservationDay(page) {
   } else {
     schedule = page.error ? '' : '<p class="booking-empty" role="status">수업을 불러오는 중입니다.</p>';
   }
-  host.innerHTML = (session.isAdmin ? '' : bookingMembershipCard(page.data?.membership, page.date)) + bookingCalendar(page) +
-    `<section aria-label="선택한 날짜의 수업"><div class="booking-list-head"><h2>${label}</h2>
+  const membership = session.isAdmin ? '' : bookingMembershipCard(page.data?.membership, page.date);
+  host.innerHTML = `<div class="booking-planner">${bookingCalendar(page)}${membership}</div>` +
+    `<section class="booking-sessions" aria-label="선택한 날짜의 수업"><div class="booking-list-head"><h2>${label}</h2>
       <button type="button" class="booking-refresh" data-book-refresh>새로고침</button></div>
       <p class="booking-feedback" role="status" aria-live="polite"></p>${schedule}</section>`;
   host.querySelectorAll('details[data-roster]').forEach(node => { node.open = openRosters.has(node.dataset.roster); });
