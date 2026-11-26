@@ -80,9 +80,10 @@ test('a registered box member can book independently of Zonda and keeps their re
   const returning = client(createServer({dataDir}));
   assert.equal((await returning('/api/login', 'POST', credentials)).status, 200);
   assert.equal(classAt(await returning(schedule)).myStatus, 'confirmed');
-  const canceled = await returning('/api/reservations', 'POST', {date, startTime, action: 'cancel'});
-  assert.equal(classAt(canceled).confirmedCount, 0);
-  const changed = await returning('/api/reservations', 'POST', {date, startTime: '21:30', action: 'reserve'});
+  const changed = await returning('/api/reservations', 'POST', {date, fromStartTime: startTime, startTime: '21:30', action: 'change'});
   assert.equal(changed.status, 200);
+  assert.equal(classAt(changed).confirmedCount, 0);
   assert.equal(changed.data.classes.find(slot => slot.startTime === '21:30').myStatus, 'confirmed');
+  const canceled = await returning('/api/reservations', 'POST', {date, startTime: '21:30', action: 'cancel'});
+  assert.equal(canceled.data.myClassStartTime, null);
 });

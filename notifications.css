@@ -1,0 +1,21 @@
+.booking-inbox {
+  margin: 0 0 1rem;
+  border-block: 1px solid #dbe4de;
+}
+.booking-inbox summary {
+  padding: .8rem .2rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.booking-inbox-content {
+  padding: 0 .2rem .85rem;
+  font-size: .94rem;
+}
+.booking-inbox-content ul {
+  margin: 0 0 .7rem;
+  padding-inline-start: 1.25rem;
+}
+.booking-inbox-content ul:empty, .booking-inbox-content p:empty { display: none; }
+.booking-inbox-content li + li { margin-top: .35rem; }
+.booking-inbox-actions { display: flex; flex-wrap: wrap; gap: .6rem; }
+.booking-inbox [hidden] { display: none; }

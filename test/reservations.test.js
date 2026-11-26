@@ -26,11 +26,11 @@ function box() {
   };
 }
 
-function fixture(initialStore = box(), persist = () => {}) {
+function fixture(initialStore = box(), persist = () => {}, promotionHooks = {}) {
   let store = initialStore;
   let now = '2026-11-29T15:05:00Z'; // Monday 00:05 in Korea
   const service = createReservationService({
-    ApiError, getStore: () => store, now: () => new Date(now),
+    ApiError, getStore: () => store, now: () => new Date(now), ...promotionHooks,
     async commit(next) { await persist(next); store = next; },
   });
   async function request(method, user, url, body) {
@@ -51,6 +51,9 @@ function fixture(initialStore = box(), persist = () => {}) {
     },
     change(user, action = 'reserve', startTime = CLASS, date = MONDAY) {
       return request('POST', user, '/api/reservations', {action, date, startTime});
+    },
+    move(user, fromStartTime, startTime) {
+      return request('POST', user, '/api/reservations', {action: 'change', date: MONDAY, fromStartTime, startTime});
     },
   };
 }
@@ -152,6 +155,76 @@ test('a member can move classes by cancelling before class start', async () => {
   assert.equal(changed.myClassStartTime, '18:30');
   assert.equal(classAt(changed, '18:30').myStatus, 'confirmed');
   assert.equal(classAt(changed).confirmedCount, 0);
+});
+
+test('switching frees the source, confirms the destination and records the single FIFO promotion together', async () => {
+  const seed = fixture();
+  for (let i = 1; i <= 20; i++) await seed.change('u' + i);
+  const sent = [];
+  let commits = 0;
+  const f = fixture(seed.store, () => { commits++; }, {
+    recordPromotion: (next, event) => ({ ...next, recorded: event }),
+    deliverPromotion(event) { assert.equal(f.store.recorded.id, event.id); sent.push(event); },
+  });
+  const moved = await f.move('u1', CLASS, '18:30');
+  assert.equal(classAt(moved, '18:30').myStatus, 'confirmed');
+  assert.equal(classAt(moved).myStatus, null);
+  assert.equal(classAt(await f.day('u19')).myStatus, 'confirmed');
+  assert.equal(classAt(await f.day('u20')).myWaitlistPosition, 1);
+  assert.equal((await f.move('u1', CLASS, '18:30')).myClassStartTime, '18:30');
+  assert.equal(commits, 1);
+  assert.equal(sent.length, 1);
+  assert.deepEqual([sent[0].memberId, sent[0].date, sent[0].startTime], ['u19', MONDAY, CLASS]);
+  const waitlisted = await f.move('u20', CLASS, '18:30');
+  assert.equal(classAt(waitlisted, '18:30').myStatus, 'confirmed');
+  assert.equal(sent.length, 1);
+});
+
+test('the loser in a race for the last confirmed seat keeps the original reservation on retry', async () => {
+  const seed = fixture();
+  for (let i = 1; i <= 17; i++) await seed.change('u' + i);
+  await seed.change('u18', 'reserve', '18:30');
+  await seed.change('u19', 'reserve', '18:30');
+  const instance = versionedStore(seed.store);
+  const results = await Promise.allSettled(['u18', 'u19'].map(user => instance().move(user, '18:30', CLASS)));
+  assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
+  const loser = results[0].status === 'rejected' ? 'u18' : 'u19';
+  const verifier = instance();
+  await assert.rejects(verifier.move(loser, '18:30', CLASS), /확정 자리가 모두 찼습니다/);
+  const view = await verifier.day(loser);
+  assert.equal(classAt(view, '18:30').myStatus, 'confirmed');
+  assert.equal(classAt(view).waitlistCount, 0);
+});
+
+test('a stale source, missing original booking, or started class cannot be switched', async () => {
+  const f = fixture();
+  await assert.rejects(f.move('u1', CLASS, '18:30'), clientError);
+  await f.change('u1');
+  await assert.rejects(f.move('u1', '11:50', '18:30'), clientError);
+  await assert.rejects(f.move('u1', CLASS, '09:50'), clientError);
+  await assert.rejects(f.move('u1', CLASS, CLASS), clientError);
+  f.setTime('2026-11-30T00:40:00Z');
+  await assert.rejects(f.move('u1', CLASS, '18:30'), clientError);
+  await f.change('u2', 'reserve', '18:30');
+  await assert.rejects(f.move('u2', '18:30', CLASS), clientError);
+  assert.equal((await f.day()).myClassStartTime, CLASS);
+  assert.equal((await f.day('u2')).myClassStartTime, '18:30');
+});
+
+test('a failed write preserves the original waitlist and never sends a promotion', async () => {
+  const seed = fixture();
+  for (let i = 1; i <= 19; i++) await seed.change('u' + i);
+  let sent = 0;
+  const f = fixture(seed.store, () => { throw new Error('write failed'); }, {
+    recordPromotion: (next, event) => ({ ...next, recorded: event }),
+    deliverPromotion: () => { sent++; },
+  });
+  await assert.rejects(f.move('u1', CLASS, '18:30'), /write failed/);
+  await assert.rejects(f.change('u1', 'cancel'), /write failed/);
+  assert.equal(sent, 0);
+  assert.equal(f.store.recorded, undefined);
+  assert.equal((await f.day()).myClassStartTime, CLASS);
+  assert.equal(classAt(await f.day('u19')).myWaitlistPosition, 1);
 });
 
 test('bookings are independent of Zonda and other dates; only admins see names', async () => {

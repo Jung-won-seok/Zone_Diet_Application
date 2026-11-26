@@ -28,14 +28,18 @@ test('a future class can be browsed before bookings open at Korean midnight', ()
   assert.match(notice, /00:00|자정/);
 });
 
-test('one confirmed or waitlisted class blocks a second class on that date', () => {
+test('an existing booking can be moved only while both classes are open and a confirmed seat is free', () => {
   assert.match(ui.bookingClassRow(slot(), false, null), /data-book-action="reserve"/);
-  assert.doesNotMatch(ui.bookingClassRow(slot(), false, '06:30'), /data-book-action/);
+  const original = slot({ startTime: '06:30', myStatus: 'confirmed' });
+  assert.match(ui.bookingClassRow(slot(), false, original), /data-book-action="change"/);
+  assert.doesNotMatch(ui.bookingClassRow(slot({ confirmedCount: 18 }), false, original), /data-book-action/);
+  assert.doesNotMatch(ui.bookingClassRow(slot(), false, { ...original, closed: true }), /data-book-action/);
+  assert.doesNotMatch(ui.bookingClassRow(slot({ closed: true }), false, original), /data-book-action/);
   const waiting = slot({ confirmedCount: 18, waitlistCount: 2, myStatus: 'waiting', myWaitlistPosition: 2 });
-  const ownRow = ui.bookingClassRow(waiting, false, '09:40');
+  const ownRow = ui.bookingClassRow(waiting, false, waiting);
   assert.match(ownRow, /대기\s*2번/);
   assert.match(ownRow, /data-book-action="cancel"/);
-  assert.doesNotMatch(ui.bookingClassRow({ ...waiting, closed: true }, false, '09:40'), /data-book-action/);
+  assert.doesNotMatch(ui.bookingClassRow({ ...waiting, closed: true }, false, waiting), /data-book-action/);
 });
 
 test('the last waiting place is offered only while still available', () => {
@@ -119,6 +123,38 @@ test('a full class or an unconfirmed network response never submits twice', asyn
     assert.equal(fixture.requests.length, 1);
     assert.equal(fixture.delays.length, 0);
   }
+});
+
+test('a rejected time change immediately refreshes both schedules and preserves the visible original booking', async () => {
+  const previous = slot({ myStatus: 'confirmed', confirmedCount: 4 });
+  const target = slot({ startTime: '18:30', endTime: '19:20', confirmedCount: 17 });
+  const originalDay = { date: '2026-12-07', today: '2026-12-07', myClassStartTime: previous.startTime, classes: [previous, target] };
+  const latestDay = { ...originalDay, classes: [previous, { ...target, confirmedCount: 18 }] };
+  const requests = [];
+  const feedback = { classList: { toggle() {} } };
+  const host = { querySelectorAll: () => [], querySelector: () => feedback };
+  const page = { host, data: originalDay, date: originalDay.date, today: originalDay.today, busy: false };
+  const context = vm.createContext({
+    page, session: { isAdmin: false }, confirm: () => true, escapeHTML: String,
+    clearTimeout() {}, setTimeout() {},
+    async api(url, options) {
+      requests.push({url, body: options && JSON.parse(options.body)});
+      if (options) throw Object.assign(new Error('확정 자리가 모두 찼습니다. 기존 신청은 유지됩니다.'), {status: 409});
+      return latestDay;
+    },
+  });
+  vm.runInContext(reservationSource, context);
+  vm.runInContext('reservationPage = page', context);
+  await context.changeReservation(page, { dataset: { bookTime: target.startTime, bookAction: 'change' } });
+  assert.deepEqual(requests, [
+    {url: '/api/reservations', body: {date: page.date, startTime: target.startTime, action: 'change', fromStartTime: previous.startTime}},
+    {url: '/api/reservations?date=' + page.date, body: undefined},
+  ]);
+  assert.equal(page.busy, false);
+  assert.match(feedback.textContent, /기존 신청은 유지/);
+  assert.match(host.innerHTML, /내 수업은 09:40 \(예약 확정\)/);
+  assert.match(host.innerHTML, /변경할 자리 없음/);
+  assert.doesNotMatch(host.innerHTML, /data-book-action="change"/);
 });
 
 test('leaving the schedule during a retry delay stops further mutations', async () => {

@@ -24,6 +24,22 @@ function boxMembersView() {
           <input type="search" id="box-member-search" placeholder="이름 또는 아이디 검색"></div>
           <button id="box-members-refresh" type="button" class="button secondary">새로고침</button></div>
         <div id="box-member-directory"><p role="status">회원 목록을 불러오는 중입니다.</p></div>
+        <dialog id="box-recovery-dialog" class="card" aria-labelledby="box-recovery-title">
+          <h2 id="box-recovery-title">회원 계정 찾기</h2>
+          <p id="box-recovery-identity"></p>
+          <form id="box-recovery-form" class="form-stack">
+            <label class="check-field"><input name="verified" type="checkbox" required>박스에서 회원 본인을 확인했습니다.</label>
+            <p class="subtitle">비밀번호를 잊은 회원에게만 재설정 링크를 전달하세요. 새로 발급하면 이전 링크는 만료됩니다.</p>
+            <button type="submit" class="button">재설정 링크 발급</button>
+          </form>
+          <div id="box-recovery-result" class="form-stack" hidden>
+            <div class="field"><label for="box-recovery-url">회원에게 전달할 링크</label>
+              <input id="box-recovery-url" type="url" readonly autocomplete="off"></div>
+            <button id="box-recovery-copy" type="button" class="button secondary">링크 복사</button>
+          </div>
+          <p id="box-recovery-feedback" role="status"></p>
+          <button type="button" id="box-recovery-close" class="button secondary">닫기</button>
+        </dialog>
       </section>
     </div>`;
 }
@@ -47,6 +63,12 @@ function mountBoxMembers() {
   const search = root.querySelector('#box-member-search');
   const refresh = root.querySelector('#box-members-refresh');
   const message = root.querySelector('#box-member-message');
+  const dialog = root.querySelector('#box-recovery-dialog');
+  const recoveryForm = root.querySelector('#box-recovery-form');
+  const recoveryResult = root.querySelector('#box-recovery-result');
+  const recoveryUrl = root.querySelector('#box-recovery-url');
+  const recoveryFeedback = root.querySelector('#box-recovery-feedback');
+  let recoveryTarget = null;
   const current = { form, busy: false, members: [], readVersion: 0 };
   boxMemberPage = current;
 
@@ -66,9 +88,11 @@ function mountBoxMembers() {
         `<button type="button" class="button secondary" data-enroll-member="${escapeHTML(member.id)}"
           aria-label="${escapeHTML(member.name)} 존다 참여 등록">참여 등록</button>`;
       return `<div class="directory-row"><strong>${escapeHTML(member.name)}</strong><code>${escapeHTML(member.username)}</code>
-        <span>${escapeHTML(team || (member.zonda ? '미배정' : '—'))}</span><div>${action}</div></div>`;
+        <span>${escapeHTML(team || (member.zonda ? '미배정' : '—'))}</span><div>${action}
+          <button type="button" class="button text" data-recover-member="${escapeHTML(member.id)}"
+            aria-label="${escapeHTML(member.name)} 계정 찾기">계정 찾기</button></div></div>`;
     });
-    list.innerHTML = `<div class="directory-head"><span>이름</span><span>로그인 아이디</span><span>팀</span><span>존다 참여</span></div>${rows.join('')}`;
+    list.innerHTML = `<div class="directory-head"><span>이름</span><span>로그인 아이디</span><span>팀</span><span>회원 관리</span></div>${rows.join('')}`;
   }
 
   function acceptDirectory(data) {
@@ -131,11 +155,65 @@ function mountBoxMembers() {
     void save('/api/admin/members', member, `${member.name} 회원을 등록했습니다.`, true);
   });
   list.addEventListener('click', event => {
+    const recover = event.target.closest('[data-recover-member]');
+    if (recover) {
+      const member = current.members.find(entry => entry.id === recover.dataset.recoverMember);
+      if (!member) return;
+      recoveryTarget = { member };
+      root.querySelector('#box-recovery-identity').textContent = `${member.name} 회원 · 로그인 아이디 ${member.username}`;
+      recoveryForm.reset();
+      recoveryForm.hidden = false;
+      recoveryForm.querySelector('button').disabled = false;
+      recoveryResult.hidden = true;
+      recoveryUrl.value = '';
+      recoveryFeedback.textContent = '';
+      dialog.showModal();
+      return;
+    }
     const button = event.target.closest('[data-enroll-member]');
     if (!button) return;
     const member = current.members.find(entry => entry.id === button.dataset.enrollMember);
     if (member) void save('/api/admin/members/enroll', { memberId: member.id }, `${member.name} 회원을 존다에 등록했습니다.`, false);
   });
+  recoveryForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    const target = recoveryTarget;
+    if (!target || target.busy || !recoveryForm.elements.verified.checked) return;
+    target.busy = true;
+    const button = recoveryForm.querySelector('button');
+    button.disabled = true;
+    recoveryFeedback.textContent = '링크를 발급하는 중입니다.';
+    try {
+      const result = await api('/api/admin/members/recovery', { method: 'POST',
+        body: JSON.stringify({ memberId: target.member.id, identityVerified: true }) });
+      if (boxMemberPage !== current || recoveryTarget !== target) return;
+      recoveryUrl.value = new URL('/#reset-password/' + result.token, location.origin).href;
+      recoveryForm.hidden = true;
+      recoveryResult.hidden = false;
+      const expiry = new Date(result.expiresAt).toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour12: false, hour: '2-digit', minute: '2-digit' });
+      recoveryFeedback.textContent = `한국 시간 ${expiry}까지 한 번 사용할 수 있습니다.`;
+      recoveryUrl.focus();
+      recoveryUrl.select();
+    } catch (error) {
+      if (boxMemberPage === current && recoveryTarget === target) recoveryFeedback.textContent = error.message;
+    } finally {
+      target.busy = false;
+      if (recoveryTarget === target) button.disabled = false;
+    }
+  });
+  root.querySelector('#box-recovery-copy').addEventListener('click', async () => {
+    const target = recoveryTarget;
+    try {
+      await navigator.clipboard.writeText(recoveryUrl.value);
+      if (recoveryTarget === target) recoveryFeedback.textContent = '링크를 복사했습니다.';
+    } catch {
+      if (recoveryTarget !== target) return;
+      recoveryUrl.select();
+      recoveryFeedback.textContent = '선택된 링크를 복사해서 회원에게 전달해주세요.';
+    }
+  });
+  root.querySelector('#box-recovery-close').addEventListener('click', () => dialog.close());
+  dialog.addEventListener('close', () => { recoveryTarget = null; recoveryUrl.value = ''; });
   search.addEventListener('input', paintList);
   refresh.addEventListener('click', readDirectory);
   void readDirectory();

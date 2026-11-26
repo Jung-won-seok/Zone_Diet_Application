@@ -23,7 +23,7 @@ function reservationsView() {
   return `<div class="box-schedule-heading"><h1>수업 예약</h1>
     <p>평일 수업은 전날 00:00(한국 시간)에 예약을 엽니다. 대기 신청을 포함해 하루 한 수업만 신청할 수 있습니다.</p>
     <p>수업당 정원 18명 · 대기 2명. 확정자가 취소하면 대기 순서대로 자동 승격됩니다.</p></div>
-    <div id="box-schedule"></div>`;
+    <div id="booking-notifications"></div><div id="box-schedule"></div>`;
 }
 
 function cleanupReservations() {
@@ -75,21 +75,21 @@ function bookingAvailabilityNotice(data) {
     const booked = data.classes.find(slot => slot.startTime === data.myClassStartTime);
     if (booked) {
       const status = booked.myStatus === 'waiting' ? `대기 ${booked.myWaitlistPosition}번` : '예약 확정';
-      const next = booked.closed ? '수업이 시작되어 변경할 수 없습니다.' : '다른 수업을 신청하려면 이 신청을 먼저 취소해주세요.';
+      const next = booked.closed ? '수업이 시작되어 변경할 수 없습니다.' : '확정 자리가 있는 다른 수업으로 시간을 변경할 수 있습니다.';
       text = `이날 내 수업은 ${booked.startTime} (${status})입니다. ${next}`;
     }
   }
   return text ? `<p class="booking-day-notice">${escapeHTML(text)}</p>` : '';
 }
 
-function bookingClassRow(slot, isAdmin, myClassStartTime) {
+function bookingClassRow(slot, isAdmin, booked) {
   const waiting = slot.myStatus === 'waiting';
   const mine = waiting || slot.myStatus === 'confirmed';
   const available = slot.confirmedCount < slot.capacity;
   const full = !available && slot.waitlistCount >= slot.waitlistCapacity;
-  const otherClass = Boolean(myClassStartTime && myClassStartTime !== slot.startTime);
+  const otherClass = Boolean(booked && booked.startTime !== slot.startTime);
   let status = available ? '예약 가능' : full ? '정원·대기 마감' : '대기 가능';
-  if (otherClass && !full) status = '다른 수업 신청 중';
+  if (otherClass && !available) status = '변경할 자리 없음';
   if (slot.notOpenYet) status = '예약 오픈 전';
   if (slot.closed) status = '접수 종료';
   if (mine) {
@@ -97,10 +97,19 @@ function bookingClassRow(slot, isAdmin, myClassStartTime) {
     if (slot.closed) status += ' · 접수 종료';
   }
   let action = '';
-  if (!isAdmin && !slot.notOpenYet && !slot.closed && (mine || (!full && !otherClass))) {
-    const label = mine ? (waiting ? '대기 취소' : '예약 취소') : (available ? '예약하기' : '대기 신청');
+  const canChange = otherClass && !booked.closed && available;
+  if (!isAdmin && !slot.notOpenYet && !slot.closed && (mine || canChange || (!full && !otherClass))) {
+    let operation = 'reserve';
+    let label = available ? '예약하기' : '대기 신청';
+    if (mine) {
+      operation = 'cancel';
+      label = waiting ? '대기 취소' : '예약 취소';
+    } else if (canChange) {
+      operation = 'change';
+      label = '이 시간으로 변경';
+    }
     action = `<button type="button" class="button booking-action ${mine ? 'secondary' : ''}"
-      data-book-time="${escapeHTML(slot.startTime)}" data-book-action="${mine ? 'cancel' : 'reserve'}"
+      data-book-time="${escapeHTML(slot.startTime)}" data-book-action="${operation}"
       aria-label="${escapeHTML(slot.startTime)} 수업 ${label}">${label}</button>`;
   }
   return `<li class="booking-row${mine ? ' is-mine' : ''}${slot.closed ? ' is-closed' : ''}">
@@ -118,8 +127,9 @@ function paintReservationDay(page) {
   const label = bookingDayLabel.format(new Date(page.date + 'T12:00:00Z'));
   let schedule;
   if (page.data) {
+    const booked = page.data.classes.find(slot => slot.startTime === page.data.myClassStartTime);
     schedule = page.data.classes.length
-      ? bookingAvailabilityNotice(page.data) + `<ul class="booking-list">${page.data.classes.map(slot => bookingClassRow(slot, session.isAdmin, page.data.myClassStartTime)).join('')}</ul>`
+      ? bookingAvailabilityNotice(page.data) + `<ul class="booking-list">${page.data.classes.map(slot => bookingClassRow(slot, session.isAdmin, booked)).join('')}</ul>`
       : '<p class="booking-empty">주말은 휴무입니다. 평일 날짜를 선택해주세요.</p>';
   } else {
     schedule = page.error ? '' : '<p class="booking-empty" role="status">수업을 불러오는 중입니다.</p>';
@@ -194,17 +204,23 @@ async function changeReservation(page, button) {
   if (page.busy || !page.data || reservationPage !== page) return;
   const startTime = button.dataset.bookTime;
   const action = button.dataset.bookAction;
+  const body = { date: page.data.date, startTime, action };
+  if (action === 'change') {
+    body.fromStartTime = page.data.myClassStartTime;
+    if (!confirm(`${bookingDayLabel.format(new Date(page.date + 'T12:00:00Z'))} 수업을 ${body.fromStartTime}에서 ${startTime}으로 변경할까요?`)) return;
+  }
   if (action === 'cancel' && !confirm(`${bookingDayLabel.format(new Date(page.date + 'T12:00:00Z'))} ${startTime} 수업 신청을 취소할까요?`)) return;
   page.busy = true;
   page.error = '';
   page.message = '예약 정보를 저장하는 중입니다.';
   paintReservationDay(page);
   try {
-    const data = await submitReservation(page, { date: page.data.date, startTime, action });
+    const data = await submitReservation(page, body);
     page.data = data;
     page.today = data.today;
     const changed = data.classes.find(slot => slot.startTime === startTime);
     if (action === 'cancel') page.message = `${startTime} 수업 신청을 취소했습니다.`;
+    else if (action === 'change') page.message = `${body.fromStartTime}에서 ${startTime} 수업으로 변경했습니다. 예약이 확정되었습니다.`;
     else if (changed?.myStatus === 'waiting') page.message = `${startTime} 수업 대기 ${changed.myWaitlistPosition}번입니다.`;
     else page.message = `${startTime} 수업 예약이 확정되었습니다.`;
   } catch (error) {

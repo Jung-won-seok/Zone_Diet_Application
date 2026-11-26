@@ -2,6 +2,52 @@
   margin-bottom: 22px;
 }
 
+.account-help-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--green);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+#login-root > .login-panel {
+  width: min(calc(100% - 32px), 460px);
+  margin: clamp(24px, 12vh, 110px) auto;
+  padding: clamp(20px, 5vw, 36px);
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+}
+
+#login-root > .login-panel > p,
+#box-recovery-dialog p {
+  margin: 12px 0;
+  line-height: 1.65;
+  word-break: keep-all;
+}
+
+#login-root > .login-panel [data-recovery-back] { margin-top: 16px; }
+
+#box-recovery-dialog {
+  width: min(calc(100% - 32px), 480px);
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  overflow: auto;
+}
+
+#box-recovery-dialog::backdrop { background: rgb(20 39 29 / 45%); }
+
+#box-member-directory .directory-row > div:last-child {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
 .box-schedule-heading p {
   margin-top: 8px;
   color: #54655c;

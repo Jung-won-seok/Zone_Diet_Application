@@ -86,6 +86,35 @@ function cloudFixture() {
 const consent={name:'김민준',cafeNickname:'민준카페',requestedBoardName:'김민준 게시판',note:'개인 게시판 연결 요청',consent:true,expectedVersion:0};
 const approval=request=>({requestId:request.id,expectedVersion:request.version,decision:'approve',memberId:'u01',menuId:'7',label:'김민준 게시판',confirmed:true});
 
+test('승인 전 네이버 세션은 회원 비밀번호 재설정 순서에 따라 승인 후에도 계속 사용하거나 만료된다', async t => {
+  // Freeze the clock to ensure successive resets and sessions within one millisecond stay ordered.
+  t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
+  const h = cloudFixture();
+  const admin = h.client(), oldApplicant = h.client(), newApplicant = h.client(), approvedLogin = h.client();
+  await admin.adminLogin();
+  async function resetPassword(value) {
+    const issued = await admin.request('/api/admin/members/recovery', 'POST', { memberId: 'u01', identityVerified: true });
+    assert.equal(issued.status, 201);
+    const result = await admin.request('/api/account/reset-password', 'POST', { token: issued.data.token, password: value });
+    assert.equal(result.status, 200);
+  }
+  assert.equal((await oldApplicant.signIn()).data.user.pendingApproval, true);
+  await resetPassword('first-reset-password');
+  assert.equal((await newApplicant.signIn()).data.user.pendingApproval, true);
+  const submitted = await newApplicant.request('/api/naver/link-request', 'POST', consent);
+  const reviewed = await admin.request('/api/admin/naver/request-review', 'POST', approval(submitted.data.request));
+  assert.equal(reviewed.status, 200);
+  assert.equal((await oldApplicant.request('/api/session')).data.user, null);
+  assert.equal((await newApplicant.request('/api/bootstrap')).data.user.id, 'u01');
+  assert.equal((await approvedLogin.signIn('alice', '/#reservations')).data.user.id, 'u01');
+  await resetPassword('second-reset-password');
+  assert.equal((await newApplicant.request('/api/session')).data.user, null);
+  assert.equal((await approvedLogin.request('/api/session')).data.user, null);
+  const fresh = await approvedLogin.signIn('alice', '/#reservations');
+  assert.equal(fresh.status, 200, fresh.raw);
+  assert.equal(fresh.data.user.id, 'u01');
+});
+
 test('Naver cloud login and approval survive a new server instance for every request',async()=>{
   const h=cloudFixture(),member=h.client(),admin=h.client();
   await admin.adminLogin();

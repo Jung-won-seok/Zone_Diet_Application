@@ -1,4 +1,4 @@
-const labels = { reservations: '수업 예약', members: '박스 회원 관리', zonda: '존다 프로그램', today: '오늘의 현황', team: '우리 팀 식단', board: '전체 식단', record: '데일리 기록', progress: '나의 변화', settings: '내 설정', admin: '팀 · 역할 관리', accounts: '존다 참가자', naver: '네이버 카페 연결', connect: '카페 연동 신청' };
+const labels = { reservations: '수업 예약', wod: '오늘의 와드', members: '박스 회원 관리', zonda: '존다 프로그램', today: '오늘의 현황', team: '우리 팀 식단', board: '전체 식단', record: '데일리 기록', progress: '나의 변화', settings: '내 설정', admin: '팀 · 역할 관리', accounts: '존다 참가자', naver: '네이버 카페 연결', connect: '카페 연동 신청' };
 const blankState = () => ({ settings: { name: '', startWeight: '', goalWeight: '' }, records: {} });
 let state = blankState();
 let session = null;
@@ -24,6 +24,7 @@ function personalIsDirty() { return personalSaving || personalFormSignature() !=
 function navIcon(page) {
   const paths = {
     reservations: '<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v5m10-5v5M3 11h18m-13 4h3"/>',
+    wod: '<path d="M3 10v4m3-7v10m3-12v14m6-14v14m3-12v10m3-7v4M9 12h6"/>',
     members: '<circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2m3-12v6m-3-3h6"/>',
     zonda: '<path d="M20 3C11 3 4 5 4 13a6 6 0 0 0 6 6c8 0 10-9 10-16ZM3 21l11-11"/>',
     today: '<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/>',
@@ -52,10 +53,14 @@ const hasRecord = r => Boolean(r.weight || mealCount(r) || r.workout || r.workou
 let toastTimer;
 function toast(message) { const node = document.querySelector('#toast'); node.textContent = message; node.classList.add('visible'); clearTimeout(toastTimer); toastTimer = setTimeout(() => node.classList.remove('visible'), 4000); }
 async function api(url, options = {}) {
+  const requestToken = csrfToken;
   const response = await fetch(url, { credentials: 'same-origin', ...options, headers: { 'Content-Type': 'application/json', ...(csrfToken ? {'X-CSRF-Token': csrfToken} : {}), ...options.headers } });
   const data = await response.json();
   if (!response.ok) {
-    if (response.status === 401 && url !== '/api/login') { session = null; bootstrap = null; csrfToken = ''; state = blankState(); render(); }
+    if (response.status === 401 && url !== '/api/login' && requestToken === csrfToken && session) {
+      session = null; bootstrap = null; csrfToken = ''; state = blankState(); render();
+      toast(data.error || '다시 로그인해주세요.');
+    }
     const error = new Error(data.error || '요청을 처리하지 못했습니다.');
     error.status = response.status;
     error.code = data.code;
@@ -77,6 +82,7 @@ function loginView(error = '') {
     <form id="login-form"><div class="field"><label for="login-id">아이디</label><input id="login-id" name="username" autocomplete="username" required maxlength="80"></div>
     <div class="field"><label for="login-password">비밀번호</label><input id="login-password" name="password" autocomplete="current-password" type="password" required maxlength="200"></div>
     <p id="login-error" class="form-error" role="alert">${escapeHTML(error)}</p><button class="button" type="submit">로그인</button></form>
+    <a class="account-help-link" href="#account-help">아이디 찾기 · 비밀번호 재설정</a>
     <details class="legacy-login"${location.hash === '#naver-login-error' ? ' open' : ''}><summary>존다 참가자 네이버 로그인</summary>${naverLoginView()}</details></section></div>`;
 }
 const memberProgramRoutes = [['today','오늘의 현황','오늘'],['team','우리 팀','우리 팀'],['board','전체 식단','전체 식단'],['record','데일리 기록','기록'],['progress','나의 변화','변화']];
@@ -85,6 +91,7 @@ function resolvePage(route, detail) {
   if (session.pendingApproval) return 'connect';
   if (route === 'members' && session.isAdmin) return 'members';
   if (!route || route === 'reservations') return 'reservations';
+  if (route === 'wod') return 'wod';
   if (route === 'zonda') return session.isAdmin ? 'admin' : bootstrap.zondaParticipant ? 'today' : 'zonda';
   const programRoutes = session.isAdmin ? adminProgramRoutes : memberProgramRoutes;
   if (session.isAdmin || bootstrap.zondaParticipant) {
@@ -96,12 +103,12 @@ function resolvePage(route, detail) {
 function renderShell(page) {
   document.body.classList.toggle('is-admin', session.isAdmin);
   document.body.classList.toggle('is-pending-member', Boolean(session.pendingApproval));
-  const inBox = ['reservations','members','zonda'].includes(page);
+  const inBox = ['reservations','wod','members','zonda'].includes(page);
   document.body.classList.toggle('in-box', inBox);
   document.body.classList.toggle('in-zonda', !inBox && !session.pendingApproval);
   let routes;
   if (inBox) {
-    routes = [['reservations','수업 예약','수업 예약']];
+    routes = [['reservations','수업 예약','수업 예약'],['wod','오늘의 와드','와드']];
     if (session.isAdmin) routes.push(['members','박스 회원 관리','회원 관리']);
     routes.push(['zonda','존다 프로그램','존다']);
   } else {
@@ -117,12 +124,13 @@ function renderShell(page) {
   document.querySelector('.profile').innerHTML = `<span class="avatar">${session.isAdmin ? 'AD' : escapeHTML(session.name.slice(-2))}</span><span>${escapeHTML(session.name)}</span><button id="logout-button" type="button">로그아웃</button>`;
   document.querySelector('#logout-button').addEventListener('click', async () => {
     if (navigationPending || personalSaving) return;
+    if (wodIsDirty() && !confirm('저장하지 않은 와드 입력을 버리고 로그아웃할까요?')) return;
     if (boxMembersIsDirty() && !confirm('회원 등록 화면에서 나가시겠어요?')) return;
     if (personalIsDirty() && !confirm('저장하지 않은 기록을 버리고 로그아웃할까요?')) return;
     if (naverIsDirty() && !confirm('저장하지 않은 카페 연결 설정이 있습니다. 로그아웃할까요?')) return;
     if(mealsHasUnsaved() && !await confirmMealDiscard()) return;
     if (typeof adminIsDirty === 'function' && adminIsDirty() && !confirm('저장하지 않은 팀 편성 변경이 있습니다. 로그아웃할까요?')) return;
-    try { await api('/api/logout', {method:'POST',body:'{}'}); session = null; bootstrap = null; csrfToken = ''; state = blankState(); resetAdminDraft(); location.hash = ''; render(); }
+    try { await disableBookingPushOnLogout(); await api('/api/logout', {method:'POST',body:'{}'}); session = null; bootstrap = null; csrfToken = ''; state = blankState(); resetAdminDraft(); location.hash = ''; render(); }
     catch(error) { toast(error.message); }
   });
 }
@@ -169,11 +177,21 @@ function render() {
   cleanupMeals();
   cleanupNaverUI();
   cleanupReservations();
+  cleanupBookingNotifications();
   cleanupBoxMembers();
   renderedHash = location.hash;
   document.body.classList.remove('auth-pending');
   document.body.classList.toggle('logged-out', !session);
   const loginRoot = document.querySelector('#login-root');
+  if (showAccountRecovery(loginRoot)) {
+    document.body.classList.add('logged-out');
+    app.innerHTML = '';
+    document.querySelector('.profile').innerHTML = '';
+    personalSaved = '';
+    mobileNavigation.sync();
+    renderedHash = location.hash;
+    return;
+  }
   if (!session) {
     app.innerHTML = ''; document.querySelector('.profile').innerHTML = ''; loginRoot.innerHTML = loginView();
     personalSaved = ''; mobileNavigation.sync();
@@ -197,11 +215,16 @@ function render() {
   document.querySelectorAll('[data-page]').forEach(node => { node.classList.toggle('active', node.dataset.page === page); if (node.dataset.page === page) node.setAttribute('aria-current','page'); else node.removeAttribute('aria-current'); });
   mobileNavigation.sync();
   const validDate = date && /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(`${date}T12:00:00`)) && date <= todayKey();
-  const views = {reservations:reservationsView, members:boxMembersView,
+  const views = {reservations:reservationsView, wod:wodView, members:boxMembersView,
     zonda:() => '<div class="page-heading"><h1>존다 프로그램</h1><p class="subtitle">팀별로 식단과 운동을 기록하는 8주 프로그램입니다. 참여를 원하면 박스 관리자에게 참가 등록을 요청해주세요.</p></div><a class="button secondary" href="#reservations">수업 예약으로 돌아가기</a>',
     today:todayView,team:()=>mealLoadingView(false),board:()=>mealLoadingView(true),record:()=>recordView(validDate ? date : todayKey()),progress:progressView,settings:settingsView,admin:adminView,accounts:accountsView,naver:naverAdminView,connect:naverOnboardingView};
   app.innerHTML = views[page]();
-  if (page === 'reservations') mountReservations(date);
+  if (page === 'reservations') {
+    mountReservations(date);
+    mountWodPreview(date);
+    if (!session.isAdmin) mountBookingNotifications();
+  }
+  if (page === 'wod') mountWod(date);
   if (page === 'members') mountBoxMembers();
   if (page === 'admin') bindAdmin();
   if (page === 'naver') mountNaverAdmin();
@@ -233,13 +256,17 @@ window.addEventListener('hashchange', async () => {
   navigationPending = true;
   mobileNavigation.cancel();
   try {
-    const hasDraft = personalIsDirty() || naverIsDirty() || mealsHasUnsaved() || adminIsDirty() || boxMembersIsDirty();
+    const hasDraft = personalIsDirty() || wodIsDirty() || naverIsDirty() || mealsHasUnsaved() || adminIsDirty() || boxMembersIsDirty();
     if (hasDraft) {
       restoreHash();
       const recordDate = document.querySelector('#record-date');
       if (recordDate) recordDate.value = renderedHash.split('/')[1] || todayKey();
       const mealDate = document.querySelector('#meal-date');
       if (mealDate && mealPage) mealDate.value = mealPage.date;
+      if (wodIsDirty()) {
+        restoreWodDate();
+        if (!confirm('저장하지 않은 와드 입력을 버리고 이동할까요?')) return;
+      }
       if (personalSaving) { toast('기록을 저장하고 있어요. 저장이 끝난 뒤 이동해주세요.'); return; }
       if (personalIsDirty() && !confirm('저장하지 않은 기록을 버리고 이동할까요?')) return;
       if (boxMembersIsDirty() && !confirm('회원 등록 화면에서 나가시겠어요?')) return;
@@ -261,7 +288,7 @@ window.addEventListener('hashchange', async () => {
     mobileNavigation.sync();
   }
 });
-window.addEventListener('beforeunload', event => { if(adminIsDirty() || mealsHasUnsaved() || naverIsDirty() || personalIsDirty() || boxMembersIsDirty()) { event.preventDefault(); event.returnValue = ''; } });
+window.addEventListener('beforeunload', event => { if(adminIsDirty() || mealsHasUnsaved() || naverIsDirty() || personalIsDirty() || boxMembersIsDirty() || wodIsDirty()) { event.preventDefault(); event.returnValue = ''; } });
 (async () => {
   try { const result = await api('/api/session'); session = result.user; csrfToken = result.csrfToken || ''; if(session) await loadBootstrap(); }
   catch(error) { session = null; toast('서버에 연결하지 못했습니다. 잠시 후 새로고침해주세요.'); }

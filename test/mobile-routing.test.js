@@ -28,7 +28,7 @@ class FormValues {
 function deferred() { let resolve; const promise=new Promise(done=>{resolve=done;});return {promise,resolve}; }
 function fixture(hash = '#record/2026-11-10', {isAdmin = false, zondaParticipant = true, pendingApproval = false} = {}) {
   const listeners={}, nodes=new Map(), links=[], prompts=[], messages=[], calls=[];
-  const flags={meal:false,naver:false,admin:false,boxMember:false,answer:false};
+  const flags={meal:false,naver:false,admin:false,boxMember:false,wod:false,answer:false};
   const location={hash,pathname:'/',search:''};
   const user = {id: isAdmin ? 'admin' : 'u01', name: '김민준', isAdmin, pendingApproval};
   const personal = {settings:{name:'김민준',startWeight:'',goalWeight:''},records:{}};
@@ -67,6 +67,11 @@ function fixture(hash = '#record/2026-11-10', {isAdmin = false, zondaParticipant
     cleanupMeals(){flags.meal=false;},cleanupNaverUI(){flags.naver=false;},cleanupReservations(){},cleanupBoxMembers(){flags.boxMember=false;},
     mealsHasUnsaved:()=>flags.meal,naverIsDirty:()=>flags.naver,adminIsDirty:()=>flags.admin,
     boxMembersIsDirty:()=>flags.boxMember, reservationsView:()=>'<div>수업 예약</div>', boxMembersView:()=>'<div>박스 회원 관리</div>',
+    showAccountRecovery(){return false;}, mountWodPreview(){},
+    wodView:()=>'<div>오늘의 와드</div>', wodIsDirty:()=>flags.wod,
+    mountWod(date){navState.wodDate=date;navState.wodMounts=(navState.wodMounts||0)+1;},
+    restoreWodDate(){navState.restoredWodDate=navState.wodDate;}, cleanupWod(){flags.wod=false;},
+    cleanupBookingNotifications(){}, mountBookingNotifications(){}, disableBookingPushOnLogout(){},
     mountBoxMembers(){}, mountReservations(date){navState.bookingDate=date;},
     confirmMealDiscard:()=>flags.mealPrompt?flags.mealPrompt.promise:Promise.resolve(flags.answer),
     resetAdminDraft(){flags.admin=false;},memberTeamBanner:()=>'',mealLoadingView:()=>'<div>식단</div>',
@@ -137,7 +142,7 @@ test('accepted personal discard switches page once and clears old-form dirty sta
 test('booking is the default for box members and Zonda keeps previous participant bookmarks', async () => {
   const f = fixture('');
   assert.equal(f.active, 'reservations');
-  assert.deepEqual(f.pages, ['reservations', 'zonda']);
+  assert.deepEqual(f.pages, ['reservations', 'wod', 'zonda']);
   await f.navigate('#reservations/2027-01-04');
   assert.equal(f.navState.bookingDate, '2027-01-04');
   await f.navigate('#zonda');
@@ -175,7 +180,7 @@ test('box-only members can open Zonda information and gain access after enrollme
 test('administrators manage the box and Zonda separately; unapproved applicants only see onboarding', async () => {
   const f = fixture('', {isAdmin: true, zondaParticipant: false});
   assert.equal(f.active, 'reservations');
-  assert.deepEqual(f.pages, ['reservations', 'members', 'zonda']);
+  assert.deepEqual(f.pages, ['reservations', 'wod', 'members', 'zonda']);
   await f.navigate('#members');
   assert.equal(f.active, 'members');
   assert.match(f.markup, /박스 회원 관리/);
@@ -191,4 +196,22 @@ test('administrators manage the box and Zonda separately; unapproved applicants 
   const pending = fixture('#reservations', {zondaParticipant: false, pendingApproval: true});
   assert.deepEqual(pending.pages, ['connect']);
   assert.equal(pending.active, 'connect');
+});
+
+test('members outside Zonda can open a WOD and preserve an unsaved result when declining a date change', async () => {
+  const f = fixture('#wod/2026-11-10', {zondaParticipant:false});
+  assert.equal(f.active, 'wod');
+  assert.equal(f.navState.wodDate, '2026-11-10');
+  const mounts = f.navState.wodMounts;
+  f.flags.wod = true;
+  assert.equal(f.unload().prevented, true);
+  await f.navigate('#wod/2026-11-09');
+  assert.equal(f.location.hash, '#wod/2026-11-10');
+  assert.equal(f.navState.restoredWodDate, '2026-11-10');
+  assert.equal(f.navState.wodMounts, mounts);
+  assert.equal(f.prompts.length, 1);
+  f.flags.answer = true;
+  await f.navigate('#wod/2026-11-09');
+  assert.equal(f.navState.wodDate, '2026-11-09');
+  assert.equal(f.navState.wodMounts, mounts + 1);
 });

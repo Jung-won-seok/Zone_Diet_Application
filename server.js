@@ -8,10 +8,12 @@ const { createNaverCafe } = require('./naver-cafe');
 const { createNaverOnboarding } = require('./naver-onboarding');
 const { createReservationService } = require('./reservations-server');
 const { createBoxMemberService } = require('./members-server');
+const { createNotificationService } = require('./notifications-server');
+const { createWodService } = require('./wod-server');
 const publicAssets = require('./public-assets');
 const CORE_ROLES = ['diet', 'leader', 'mission', 'sns'];
 const SESSION_AGE = 8 * 60 * 60 * 1000;
-const assetTypes = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
+const assetTypes = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.webmanifest': 'application/manifest+json', '.png': 'image/png' };
 const STATIC = new Map(publicAssets.map(file => ['/' + file, [file, assetTypes[path.extname(file)]]]));
 STATIC.set('/', STATIC.get('/index.html'));
 class ApiError extends Error { constructor(status, message) { super(message); this.status = status; } }
@@ -105,7 +107,12 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
     else { persist(next); store = next; }
   }
   const meals = createMealService({ getStore: () => store, commit, mediaDir: path.join(dataDir, 'media'), mediaStorage, ApiError });
-  const reservations = createReservationService({ getStore: () => store, commit, ApiError });
+  const notifications = createNotificationService({ getStore: () => store, commit, ApiError });
+  const reservations = createReservationService({
+    getStore: () => store, commit, ApiError,
+    recordPromotion: notifications.recordPromotion, deliverPromotion: notifications.deliverPromotion
+  });
+  const wods = createWodService({ getStore: () => store, commit, ApiError, isValidDate });
   const boxMembers = createBoxMemberService({ getStore: () => store, commit, ApiError, makeUser, blankPersonal });
   const sessions = new Map(cloud ? Object.entries(store.authState?.sessions || {}) : []);
   const failures = new Map(cloud ? Object.entries(store.authState?.failures || {}) : []);
@@ -120,10 +127,15 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
       if (!identity?.connectionId || !identity.providerIdHash || !expectedIdentity || ['connectionId','providerIdHash','appHash'].some(key=>identity[key]!==expectedIdentity[key])) throw new ApiError(409, '네이버 로그인 정보를 다시 확인해주세요.');
       const token = crypto.randomBytes(32).toString('hex'), csrfToken = crypto.randomBytes(32).toString('hex');
       const old = getSession(req);
+      const previousSession = old && sessions.get(old.token);
       if (old) sessions.delete(old.token);
-      sessions.set(token,{userId,csrfToken,expires:Date.now()+SESSION_AGE,naverIdentity:{...expectedIdentity}});
+      const user = store.users.find(u => u.id === userId) || naverAuth.resolveApplicant(userId);
+      const issuedAt = Date.now();
+      sessions.set(token,{userId,csrfToken,authVersion:user?.authVersion || 0,expires:issuedAt+SESSION_AGE,
+        ...(user?.pendingApproval ? { pendingNaverIssuedAt: issuedAt, resetRevisionAtIssue: store.passwordResetRevision || 0 } : {}),
+        naverIdentity:{...expectedIdentity}});
       try { await persistAuth(); }
-      catch (error) { sessions.delete(token); if(old)sessions.set(old.token,{userId:old.originUserId,csrfToken:old.csrfToken,expires:old.expires,...(old.naverIdentity?{naverIdentity:old.naverIdentity}:{})}); throw error; }
+      catch (error) { sessions.delete(token); if(old)sessions.set(old.token,previousSession); throw error; }
       res.setHeader('Set-Cookie',sessionCookie(token));
     },
   });
@@ -144,6 +156,13 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
     if (!s || s.expires <= Date.now()) { if (token) sessions.delete(token); return null; }
     const user = store.users.find(u => u.id === s.userId) || naverAuth.resolveApplicant(s.userId);
     if (!user) return null;
+    if ((s.authVersion || 0) !== (user.authVersion || 0)) {
+      // Before first approval the session has no member ID whose password version it can capture.
+      const approvedAfterLogin = s.naverIdentity && store.naverApplicants?.[s.userId]?.memberId === user.id
+        && Number.isFinite(s.pendingNaverIssuedAt) && s.pendingNaverIssuedAt >= user.passwordResetAt
+        && s.resetRevisionAtIssue >= user.passwordResetRevision;
+      if (!approvedAfterLogin) return null;
+    }
     if (s.naverIdentity) {
       const identity = user.pendingApproval ? store.naverApplicants?.[s.userId] : store.naverConnections?.[user.id];
       if (!identity || ['connectionId','providerIdHash','appHash'].some(key=>identity[key]!==s.naverIdentity[key])) return null;
@@ -199,6 +218,7 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
       for (const [token,s] of sessions) if (s.expires <= Date.now()) sessions.delete(token);
       for (const [key,a] of failures) if (a.until <= Date.now()) failures.delete(key);
       const session = getSession(req);
+      if (await boxMembers.handlePublic(req,res,url,readJson,send)) return;
       if (route === '/api/naver/callback' && req.method === 'GET') { await naverAuth.callback(req, res, url, origin); return; }
       if (await naverAuth.publicHandle(req,res,url,readJson,send,origin,session)) return;
       if (route === '/api/session' && req.method === 'GET') { send(res,200,session ? { user: publicUser(session.user), csrfToken: session.csrfToken } : { user:null }); return; }
@@ -213,12 +233,17 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
         }
         failures.delete(key); if (session) sessions.delete(session.token);
         const token = crypto.randomBytes(32).toString('hex'), csrfToken = crypto.randomBytes(32).toString('hex');
-        sessions.set(token,{ userId:user.id, csrfToken, expires:Date.now() + SESSION_AGE });
+        sessions.set(token,{ userId:user.id, csrfToken, authVersion:user.authVersion || 0, expires:Date.now() + SESSION_AGE });
         await persistAuth();
         send(res,200,{ user:publicUser(user), csrfToken },{ 'Set-Cookie':sessionCookie(token) }); return;
       }
       if (route.startsWith('/api/')) {
         if (!session) throw new ApiError(401,'로그인이 필요합니다.');
+        const clientToken = req.headers['x-csrf-token'];
+        const memberActivity = /^\/api\/(wod|notifications|reservations)(\/|$)/.test(route);
+        if (!mutation && memberActivity && clientToken && clientToken !== session.csrfToken) {
+          throw new ApiError(401,'다른 탭에서 로그인 계정이 바뀌었습니다. 화면을 새로고침해주세요.');
+        }
         if (mutation && req.headers['x-csrf-token'] !== session.csrfToken) throw new ApiError(403,'로그인 화면을 새로 불러온 후 다시 시도해주세요.');
         const readAuthenticatedJson = async (request, limit) => {
           const body = await readJson(request, limit);
@@ -237,6 +262,8 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
         }
         if (await reservations.handle(req,res,session,url,readAuthenticatedJson,send)) return;
         if (await boxMembers.handle(req,res,session,url,readAuthenticatedJson,send)) return;
+        if (await notifications.handle(req,res,session,url,readAuthenticatedJson,send)) return;
+        if (await wods.handle(req,res,session,url,readAuthenticatedJson,send)) return;
         if (!session.user.isAdmin && !store.members.some(member => member.id === session.user.id)) {
           throw new ApiError(403, '존다 참가자로 등록된 회원만 이용할 수 있습니다.');
         }
@@ -263,7 +290,7 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
       const entry = STATIC.get(route);
       if (!entry || !['GET','HEAD'].includes(req.method)) throw new ApiError(404,'페이지를 찾을 수 없습니다.');
       const data = await fs.promises.readFile(path.join(__dirname,entry[0]));
-      res.writeHead(200,{'Content-Type':`${entry[1]}; charset=utf-8`,'Cache-Control':'no-store'}); res.end(req.method === 'HEAD' ? undefined : data);
+      res.writeHead(200,{'Content-Type':entry[1],'Cache-Control':'no-store'}); res.end(req.method === 'HEAD' ? undefined : data);
     } catch (error) {
       if (res.headersSent || res.destroyed) return;
       const status = error.status || (error.code === 'ENOENT' ? 404 : 500);
@@ -275,4 +302,4 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
   return server;
 }
 if (require.main === module) { const port = Number(process.env.PORT || 3000); createServer().listen(port,'127.0.0.1',() => console.log(`Local: http://localhost:${port}`)); }
-module.exports = { createServer, seedStore, ApiError };
+module.exports = { createServer, seedStore, makeUser, ApiError };
