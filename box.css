@@ -65,6 +65,39 @@
   font-variant-numeric: tabular-nums;
 }
 
+.booking-membership {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--white);
+  margin-bottom: 14px;
+}
+
+.booking-membership h2,
+.booking-membership p,
+.booking-special,
+.booking-cancel-reason {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.booking-membership-limit,
+.booking-cancel-reason,
+.booking-day-notice.is-cancelled,
+.booking-row.is-cancelled .booking-state {
+  color: #90461c;
+}
+
+.booking-membership-limit { flex-basis: 100%; }
+.booking-special { margin-bottom: 5px; color: var(--green); }
+.booking-cancel-reason { margin-top: 6px; }
+
 .booking-calendar, .booking-list, .booking-empty {
   background: var(--white);
   border: 1px solid var(--line);

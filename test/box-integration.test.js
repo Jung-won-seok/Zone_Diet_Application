@@ -26,6 +26,57 @@ function client(server) {
   };
 }
 
+test('closing a weekend special refunds only the charged member and notifies both rosters exactly once', async t => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), 'leben-special-'));
+  t.after(() => rm(dataDir, {recursive: true, force: true}));
+  t.mock.timers.enable({apis: ['Date'], now: new Date('2026-11-27T09:00:00+09:00')});
+  const app = createServer({dataDir});
+  const coach = client(app), first = client(app), second = client(app);
+  await coach('/api/login', 'POST', {username: 'admin', password: 'ZondaAdmin!Demo27'});
+  await first('/api/login', 'POST', {username: 'member01', password: 'Zonda01!Demo'});
+  await second('/api/login', 'POST', {username: 'member02', password: 'Zonda02!Demo'});
+  const date = '2026-11-28', startTime = '10:00';
+  const dayUrl = '/api/reservations?date=' + date;
+  const schedule = changes => coach('/api/admin/schedule', 'POST', {date, ...changes});
+  const reserve = member => member('/api/reservations', 'POST', {action: 'reserve', date, startTime});
+  const balance = async member => (await member('/api/membership')).data.remainingVisits;
+  for (const memberId of ['u01', 'u02']) {
+    const saved = await coach('/api/admin/members/membership', 'PUT',
+      {memberId, kind: 'visits', remainingVisits: 1, expiresOn: date, revision: 0});
+    assert.equal(saved.status, 200);
+  }
+  const added = await schedule({action: 'addClass', revision: 0, startTime, endTime: '11:00',
+    label: '주말 특강', capacity: 1, waitlistCapacity: 2});
+  assert.equal(added.status, 200, JSON.stringify(added.data));
+  assert.equal((await reserve(first)).status, 200);
+  const preview = (await coach(dayUrl)).data;
+  const cancel = (day, waiting) => schedule({action: 'cancelClass', startTime, revision: day.scheduleRevision,
+    rosterRevision: day.rosterRevision, expectedBookings: 1 + waiting, expectedConfirmed: 1,
+    expectedWaiting: waiting, reason: '시설 점검'});
+  assert.equal((await reserve(second)).status, 200);
+  assert.equal(await balance(first), 0);
+  assert.equal(await balance(second), 1);
+  assert.equal((await cancel(preview, 0)).status, 409);
+  const closed = await cancel((await coach(dayUrl)).data, 1);
+  assert.equal(closed.status, 200, JSON.stringify(closed.data));
+  assert.equal(closed.data.classes.find(slot => slot.startTime === startTime).cancelled, true);
+  for (const [member, previousStatus] of [[first, 'confirmed'], [second, 'waiting']]) {
+    assert.equal(await balance(member), 1);
+    assert.equal((await member(dayUrl)).data.myClassStartTime, null);
+    const items = (await member('/api/notifications?format=2')).data.items;
+    assert.deepEqual(items.map(item => [item.type, item.previousStatus, item.reason]),
+      [['class_cancelled', previousStatus, '시설 점검']]);
+  }
+  assert.notEqual((await reserve(first)).status, 200);
+  const restored = await schedule({action: 'restoreClass', startTime, revision: closed.data.scheduleRevision});
+  assert.equal(restored.status, 200);
+  const slot = restored.data.classes.find(item => item.startTime === startTime);
+  assert.equal(slot.confirmedCount + slot.waitlistCount, 0);
+  assert.equal((await reserve(second)).status, 200);
+  assert.equal(await balance(second), 0);
+  assert.equal((await first('/api/notifications?format=2')).data.items.length, 1);
+});
+
 test('a registered box member can book independently of Zonda and keeps their reservation on enrollment and restart', async t => {
   const dataDir = await mkdtemp(path.join(tmpdir(), 'crossfit-box-integration-'));
   t.after(() => rm(dataDir, {recursive: true, force: true}));

@@ -1,9 +1,9 @@
 // No application pages, authenticated responses or personal data are cached by this worker.
 self.addEventListener('push', event => {
-  event.waitUntil(showBookingPromotion());
+  event.waitUntil(showBookingNotice());
 });
 
-async function showBookingPromotion() {
+async function showBookingNotice() {
   let body = '새 예약 알림이 있어요. 앱에서 확인해주세요.';
   let route = '/#reservations';
   let tag = 'leben-reservations';
@@ -12,14 +12,14 @@ async function showBookingPromotion() {
     if (sub) {
       const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(sub.endpoint));
       const id = [...new Uint8Array(bytes)].map(byte => byte.toString(16).padStart(2, '0')).join('');
-      const result = await fetch('/api/notifications?device=' + id, {
+      const result = await fetch('/api/notifications?format=2&device=' + id, {
         credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(3000)
       });
       if (result.ok) {
         const data = await result.json();
         const item = data.registered && data.latest;
         if (item && /^\d{4}-\d{2}-\d{2}$/.test(item.date) && /^\d{2}:\d{2}$/.test(item.startTime)) {
-          body = item.date + ' ' + item.startTime + ' 수업 예약이 확정됐어요.';
+          body = item.message || (item.date + ' ' + item.startTime + ' 수업 예약이 확정됐어요.');
           route += '/' + item.date;
           tag = 'leben-promotion-' + item.id;
         }

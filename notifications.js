@@ -16,7 +16,7 @@ function bookingPushSupport() {
     return '아이폰·아이패드는 공유 메뉴에서 ‘홈 화면에 추가’한 다음, 홈 화면의 레벤 앱에서 기기 알림을 켜주세요.';
   }
   if (!window.isSecureContext || !('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
-    return '이 브라우저에서는 아래 알림함에서 예약 확정을 확인할 수 있어요.';
+    return '이 브라우저에서는 알림함에서 예약 확정과 수업 변경을 확인할 수 있어요.';
   }
   return '';
 }
@@ -38,8 +38,9 @@ function paintBookingInbox(page) {
   page.host.querySelector('summary').textContent = unread ? '예약 알림 · 읽지 않음 ' + unread + '건' : '예약 알림';
   const list = page.host.querySelector('[data-notice-list]');
   const content = page.items.map(item =>
-    '<li><a href="#reservations/' + encodeURIComponent(item.date) + '">' + escapeHTML(item.date) +
-      ' ' + escapeHTML(item.startTime) + ' 수업 예약 확정</a>' + (item.read ? '' : ' · 읽지 않음') + '</li>').join('');
+    '<li><a href="#reservations/' + encodeURIComponent(item.date) + '">' +
+      escapeHTML(item.message || (item.date + ' ' + item.startTime + ' 수업 예약 확정')) + '</a>' +
+      (item.read ? '' : ' · 읽지 않음') + '</li>').join('');
   if (page.lastContent !== content) { list.innerHTML = content; page.lastContent = content; }
   page.host.querySelector('[data-notice-empty]').hidden = !page.loaded || page.items.length > 0;
   const mark = page.host.querySelector('[data-mark-notices]');
@@ -55,7 +56,7 @@ async function refreshBookingInbox(page) {
   if (!bookingNoticeActive(page) || page.loading || page.busy || document.hidden) return;
   page.loading = true;
   try {
-    const data = await api('/api/notifications', { signal: page.controller.signal });
+    const data = await api('/api/notifications?format=2', { signal: page.controller.signal });
     if (!bookingNoticeActive(page)) return;
     if (data.memberId !== page.userId) {
       cleanupBookingNotifications();
@@ -143,7 +144,7 @@ async function toggleBookingPush(page) {
       await api('/api/notifications/device', { method: 'POST', body: JSON.stringify({ endpoint: sub.endpoint, publicKey: data.publicKey }) });
       page.endpointId = await bookingDeviceId(sub.endpoint);
       page.subscribed = true;
-      page.message = '대기하던 수업이 확정되면 이 기기로 알려드려요.';
+      page.message = '예약 확정, 휴강 또는 대기 취소를 이 기기로 알려드려요.';
     }
   } catch (err) {
     page.message = err.message || '기기 알림 설정에 실패했습니다. 다시 시도해주세요.';
@@ -161,7 +162,7 @@ function mountBookingNotifications() {
     unsupported: bookingPushSupport(), controller: new AbortController(), message: '' };
   bookingNotificationPage = page;
   host.innerHTML = '<details class="booking-inbox"><summary>예약 알림</summary><div class="booking-inbox-content">' +
-    '<p data-notice-empty hidden>아직 대기에서 확정된 수업이 없어요.</p><ul data-notice-list></ul>' +
+    '<p data-notice-empty hidden>아직 예약 알림이 없어요.</p><ul data-notice-list></ul>' +
     '<div class="booking-inbox-actions"><button class="booking-refresh" type="button" data-mark-notices hidden>모두 읽음</button>' +
     '<button class="booking-refresh" type="button" data-notice-toggle hidden>이 기기 알림 켜기</button></div>' +
     '<p data-notice-feedback role="status"></p></div></details>';
@@ -194,7 +195,7 @@ function mountBookingNotifications() {
       page.endpointId = id;
       if (page.loaded) await refreshBookingInbox(page);
     }).catch(() => {
-      if (bookingNoticeActive(page)) { page.unsupported = '이 기기에서는 알림함에서 예약 확정을 확인해주세요.'; paintBookingInbox(page); }
+      if (bookingNoticeActive(page)) { page.unsupported = '이 기기에서는 알림함에서 예약 소식을 확인해주세요.'; paintBookingInbox(page); }
     });
   }
 }

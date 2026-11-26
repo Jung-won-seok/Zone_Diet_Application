@@ -8,6 +8,7 @@ const { createNaverCafe } = require('./naver-cafe');
 const { createNaverOnboarding } = require('./naver-onboarding');
 const { createReservationService } = require('./reservations-server');
 const { createBoxMemberService } = require('./members-server');
+const { createMembershipService } = require('./memberships-server');
 const { createNotificationService } = require('./notifications-server');
 const { createWodService } = require('./wod-server');
 const publicAssets = require('./public-assets');
@@ -110,10 +111,12 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
   const notifications = createNotificationService({ getStore: () => store, commit, ApiError });
   const reservations = createReservationService({
     getStore: () => store, commit, ApiError,
-    recordPromotion: notifications.recordPromotion, deliverPromotion: notifications.deliverPromotion
+    recordPromotion: notifications.recordPromotion, deliverPromotion: notifications.deliverPromotion,
+    deliverPromotions: notifications.deliverPromotions
   });
   const wods = createWodService({ getStore: () => store, commit, ApiError, isValidDate });
   const boxMembers = createBoxMemberService({ getStore: () => store, commit, ApiError, makeUser, blankPersonal });
+  const memberships = createMembershipService({ getStore: () => store, commit, ApiError, isValidDate });
   const sessions = new Map(cloud ? Object.entries(store.authState?.sessions || {}) : []);
   const failures = new Map(cloud ? Object.entries(store.authState?.failures || {}) : []);
   async function persistAuth() {
@@ -240,7 +243,7 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
       if (route.startsWith('/api/')) {
         if (!session) throw new ApiError(401,'로그인이 필요합니다.');
         const clientToken = req.headers['x-csrf-token'];
-        const memberActivity = /^\/api\/(wod|notifications|reservations)(\/|$)/.test(route);
+        const memberActivity = /^\/api\/(wod|notifications|reservations|membership)(\/|$)/.test(route);
         if (!mutation && memberActivity && clientToken && clientToken !== session.csrfToken) {
           throw new ApiError(401,'다른 탭에서 로그인 계정이 바뀌었습니다. 화면을 새로고침해주세요.');
         }
@@ -262,6 +265,7 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
         }
         if (await reservations.handle(req,res,session,url,readAuthenticatedJson,send)) return;
         if (await boxMembers.handle(req,res,session,url,readAuthenticatedJson,send)) return;
+        if (await memberships.handle(req,res,session,url,readAuthenticatedJson,send)) return;
         if (await notifications.handle(req,res,session,url,readAuthenticatedJson,send)) return;
         if (await wods.handle(req,res,session,url,readAuthenticatedJson,send)) return;
         if (!session.user.isAdmin && !store.members.some(member => member.id === session.user.id)) {

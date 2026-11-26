@@ -1,0 +1,38 @@
+#box-pass-dialog {
+  width: min(460px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  margin: auto;
+}
+
+#box-pass-dialog::backdrop { background: rgb(20 39 29 / 45%); }
+#box-pass-identity { margin: 6px 0 20px; color: var(--muted); }
+#box-pass-feedback:empty { display: none; }
+
+#box-pass-dialog select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 12px;
+  color: var(--ink);
+  background: white;
+  font: inherit;
+}
+
+.box-pass-help {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.box-member-identity { display: grid; min-width: 0; gap: 4px; }
+.box-member-pass { color: var(--muted); line-height: 1.5; overflow-wrap: anywhere; }
+
+@media (max-width: 580px) {
+  #box-member-directory .directory-row {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, .9fr) minmax(0, 1.3fr);
+  }
+  #box-member-directory .directory-row code { overflow-wrap: anywhere; }
+  #box-pass-dialog .form-actions { flex-wrap: wrap; }
+}

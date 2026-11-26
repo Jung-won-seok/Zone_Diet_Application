@@ -1,31 +1,7 @@
 const { randomUUID } = require('node:crypto');
 
-const CAPACITY = 18;
-const WAITLIST_CAPACITY = 2;
-const WEEKDAY_CLASSES = [
-  ['09:40', '10:30'],
-  ['11:50', '12:40'],
-  ['17:30', '18:20'],
-  ['18:30', '19:20'],
-  ['19:30', '20:20'],
-  ['20:30', '21:30'],
-  ['21:30', '22:20'],
-];
-const EARLY_CLASS = ['06:30', '07:20'];
-const seoulCalendar = new Intl.DateTimeFormat('en-CA', {
-  timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit',
-});
-
-function classesOn(date) {
-  const weekday = new Date(`${date}T00:00:00Z`).getUTCDay();
-  if (weekday === 0 || weekday === 6) return [];
-  if ([1, 3, 5].includes(weekday)) return [EARLY_CLASS, ...WEEKDAY_CLASSES];
-  return WEEKDAY_CLASSES;
-}
-
-function classHasStarted(date, startTime, instant) {
-  return instant >= Date.parse(`${date}T${startTime}:00+09:00`);
-}
+const { CAPACITY, seoulCalendar, scheduleDay, weekOverrides, getClassCapacity, prepareScheduleChange } = require('./schedule-server');
+const { membershipView, membershipIssue, chargeVisit, refundVisit } = require('./memberships-server');
 
 function bookingOpensAt(date) {
   const previousDay = new Date(`${date}T00:00:00Z`);
@@ -37,7 +13,19 @@ function bookedClass(day, memberId) {
   return Object.keys(day).find(startTime => day[startTime].includes(memberId)) || null;
 }
 
-function createReservationService({ getStore, commit, ApiError, now = Date.now, recordPromotion, deliverPromotion }) {
+function withQueues(store, date, day) {
+  const reservations = { ...store.classReservations };
+  if (Object.keys(day).length) reservations[date] = day;
+  else delete reservations[date];
+  const revisions = store.classRosterRevisions || {};
+  return { ...store, classReservations: reservations, classRosterRevisions: { ...revisions, [date]: (revisions[date] || 0) + 1 } };
+}
+
+function eventFor(memberId, date, startTime, instant, fields) {
+  return { id: randomUUID(), memberId, date, startTime, createdAt: new Date(instant).toISOString(), ...fields };
+}
+
+function createReservationService({ getStore, commit, ApiError, now = Date.now, recordPromotion, deliverPromotion, deliverPromotions }) {
   let pendingChange = Promise.resolve();
 
   function validateDate(date) {
@@ -53,26 +41,28 @@ function createReservationService({ getStore, commit, ApiError, now = Date.now, 
     const opensAt = bookingOpensAt(date);
     const notOpenYet = instant < Date.parse(opensAt);
     const names = user.isAdmin ? new Map(store.users.map(member => [member.id, member.name])) : null;
-    const classes = classesOn(date).map(([startTime, endTime]) => {
-      // The first 18 IDs are confirmed. Removing one promotes the first waiting ID.
+    const schedule = scheduleDay(store, date, instant);
+    const classes = schedule.classes.map(definition => {
+      const { startTime, capacity } = definition;
       const queue = day[startTime] || [];
       const position = queue.indexOf(user.id);
       const slot = {
-        startTime, endTime, capacity: CAPACITY, waitlistCapacity: WAITLIST_CAPACITY,
-        confirmedCount: Math.min(queue.length, CAPACITY),
-        waitlistCount: Math.max(0, queue.length - CAPACITY),
-        myStatus: position < 0 ? null : position < CAPACITY ? 'confirmed' : 'waiting',
-        myWaitlistPosition: position >= CAPACITY ? position - CAPACITY + 1 : null,
-        notOpenYet, closed: classHasStarted(date, startTime, instant),
+        ...definition, confirmedCount: Math.min(queue.length, capacity),
+        waitlistCount: Math.max(0, queue.length - capacity),
+        myStatus: position < 0 ? null : position < capacity ? 'confirmed' : 'waiting',
+        myWaitlistPosition: position >= capacity ? position - capacity + 1 : null,
+        notOpenYet, closed: definition.started || definition.cancelled,
       };
       if (names) {
         const roster = queue.map(id => ({ id, name: names.get(id) || '탈퇴한 회원' }));
-        slot.confirmed = roster.slice(0, CAPACITY);
-        slot.waiting = roster.slice(CAPACITY);
+        slot.confirmed = roster.slice(0, capacity);
+        slot.waiting = roster.slice(capacity);
       }
       return slot;
     });
-    return { date, today: seoulCalendar.format(instant), opensAt, notOpenYet, myClassStartTime: bookedClass(day, user.id), classes };
+    return { ...schedule, classes, date, today: seoulCalendar.format(instant), opensAt, notOpenYet,
+      weekOverrides: weekOverrides(store, date, instant), myClassStartTime: bookedClass(day, user.id),
+      ...(!user.isAdmin && { membership: membershipView(store, user.id) }) };
   }
 
   async function changeBooking(user, body) {
@@ -84,19 +74,22 @@ function createReservationService({ getStore, commit, ApiError, now = Date.now, 
     }
     const { date, startTime, action, fromStartTime } = body;
     validateDate(date);
-    const scheduled = classesOn(date).map(([start]) => start);
-    if (!scheduled.includes(startTime) || (action === 'change' && (!scheduled.includes(fromStartTime) || fromStartTime === startTime))) {
-      throw new ApiError(422, '선택한 날짜에 운영하는 수업이 아닙니다.');
-    }
     const instant = now();
     const store = getStore();
+    const slots = scheduleDay(store, date, instant).classes;
+    const target = slots.find(slot => slot.startTime === startTime);
+    const source = action === 'change' ? slots.find(slot => slot.startTime === fromStartTime) : target;
+    if (!target || !source || (action === 'change' && fromStartTime === startTime)) {
+      throw new ApiError(422, '선택한 날짜에 운영하는 수업이 아닙니다.');
+    }
+    if (target.cancelled || source.cancelled) throw new ApiError(409, '휴강한 수업입니다. 최신 시간표를 확인해주세요.');
     const day = store.classReservations?.[date] || {};
     const queue = day[startTime] || [];
     const current = bookedClass(day, user.id);
-    if (action === 'change' && current === startTime && queue.indexOf(user.id) < CAPACITY) {
+    if (action === 'change' && current === startTime && queue.indexOf(user.id) < target.capacity) {
       return { view: dayView(store, user, date, instant) };
     }
-    if (classHasStarted(date, startTime, instant) || (action === 'change' && classHasStarted(date, fromStartTime, instant))) {
+    if (target.started || source.started) {
       throw new ApiError(409, '수업 시작 후에는 예약·변경·취소할 수 없습니다.');
     }
     if ((action === 'reserve' && current === startTime) || (action === 'cancel' && current !== startTime)) {
@@ -108,41 +101,83 @@ function createReservationService({ getStore, commit, ApiError, now = Date.now, 
     if (action === 'reserve' && current) {
       throw new ApiError(409, '하루 한 수업만 예약하거나 대기할 수 있습니다.');
     }
-    if (action === 'reserve' && queue.length >= CAPACITY + WAITLIST_CAPACITY) {
-      throw new ApiError(409, '정원과 대기 2자리가 모두 찼습니다.');
+    if (action === 'reserve' && queue.length >= target.capacity + target.waitlistCapacity) {
+      throw new ApiError(409, '정원과 대기 자리가 모두 찼습니다.');
     }
     if (action === 'change' && current !== fromStartTime) {
       throw new ApiError(409, '기존 신청이 달라졌습니다. 현재 수업을 확인한 뒤 다시 변경해주세요.');
     }
-    if (action === 'change' && queue.length >= CAPACITY) {
+    if (action === 'change' && queue.length >= target.capacity) {
       throw new ApiError(409, '변경하려는 수업의 확정 자리가 모두 찼습니다. 기존 신청은 유지됩니다.');
     }
 
-    const nextDay = { ...day };
-    let promotion;
+    const original = day[current] || [];
+    const previouslyConfirmed = current !== null && original.indexOf(user.id) < source.capacity;
+    if (action !== 'cancel') {
+      const issue = membershipIssue(store, user.id, date, { alreadyConfirmed: action === 'change' && previouslyConfirmed });
+      if (issue) throw new ApiError(409, issue);
+    }
+    const nextDay = { ...day }, events = [];
+    let next = store;
     if (action !== 'reserve') {
-      const original = day[current];
       const remaining = original.filter(id => id !== user.id);
+      if (previouslyConfirmed) {
+        if (action === 'cancel') next = refundVisit(next, user.id, date);
+        // One seat is open. Remove now-ineligible waiters before selecting the FIFO successor.
+        while (remaining.length >= source.capacity) {
+          const waitingId = remaining[source.capacity - 1];
+          const reason = membershipIssue(next, waitingId, date);
+          if (!reason) {
+            next = chargeVisit(next, waitingId, date);
+            events.push(eventFor(waitingId, date, current, instant));
+            break;
+          }
+          remaining.splice(source.capacity - 1, 1);
+          events.push(eventFor(waitingId, date, current, instant, { type: 'waitlist_removed', reason, previousStatus: 'waiting' }));
+        }
+      }
       if (remaining.length) nextDay[current] = remaining;
       else delete nextDay[current];
-      if (original.length > CAPACITY && original.indexOf(user.id) < CAPACITY) {
-        promotion = { id: randomUUID(), memberId: original[CAPACITY], date, startTime: current, createdAt: new Date(instant).toISOString() };
-      }
     }
-    if (action !== 'cancel') nextDay[startTime] = [...queue, user.id];
-    const reservations = { ...store.classReservations };
-    if (Object.keys(nextDay).length) reservations[date] = nextDay;
-    else delete reservations[date];
+    if (action !== 'cancel') {
+      if (!previouslyConfirmed && queue.length < target.capacity) next = chargeVisit(next, user.id, date);
+      nextDay[startTime] = [...queue, user.id];
+    }
+    return saveBooking(withQueues(next, date, nextDay), events, date, user);
+  }
 
-    const next = { ...store, classReservations: reservations };
-    await commit(promotion && recordPromotion ? recordPromotion(next, promotion) : next);
-    return { view: dayView(getStore(), user, date, now()), promotion };
+  async function changeSchedule(user, body) {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) throw new ApiError(422, '시간표 변경 내용을 확인해주세요.');
+    const { date } = body;
+    validateDate(date);
+    const instant = now(), store = getStore();
+    const { settings, affected, reason } = prepareScheduleChange(store, body, instant, ApiError);
+    const events = [], nextDay = { ...store.classReservations?.[date] };
+    let next = { ...store, classSchedules: { ...store.classSchedules, [date]: settings } };
+    for (const slot of affected) {
+      const queue = nextDay[slot.startTime] || [];
+      for (const [index, memberId] of queue.entries()) {
+        const previousStatus = index < slot.capacity ? 'confirmed' : 'waiting';
+        if (previousStatus === 'confirmed') next = refundVisit(next, memberId, date);
+        events.push(eventFor(memberId, date, slot.startTime, instant, { type: 'class_cancelled', reason, previousStatus, dayClosed: body.action === 'closeDay' }));
+      }
+      delete nextDay[slot.startTime];
+    }
+    return saveBooking(events.length ? withQueues(next, date, nextDay) : next, events, date, user);
+  }
+
+  async function saveBooking(next, events, date, user) {
+    if (recordPromotion) for (const event of events) next = recordPromotion(next, event);
+    await commit(next);
+    return { view: dayView(getStore(), user, date, now()), events };
   }
 
   async function handle(req, res, session, url, readJson, send) {
-    if (url.pathname !== '/api/reservations') return false;
+    const adminSchedule = url.pathname === '/api/admin/schedule';
+    if (url.pathname !== '/api/reservations' && !adminSchedule) return false;
     if (!session?.user) throw new ApiError(401, '로그인이 필요합니다.');
     if (session.user.pendingApproval) throw new ApiError(403, '관리자가 등록한 회원만 수업 예약을 이용할 수 있습니다.');
+    if (adminSchedule && !session.user.isAdmin) throw new ApiError(403, '관리자만 시간표를 변경할 수 있습니다.');
     if (req.method === 'GET') {
       const instant = now();
       const date = url.searchParams.get('date') ?? seoulCalendar.format(instant);
@@ -154,13 +189,14 @@ function createReservationService({ getStore, commit, ApiError, now = Date.now, 
       const body = await readJson(req);
       // Evaluate limits against the previous completed write on long-lived servers.
       // Independent cloud instances additionally use the store's conditional commit.
-      const changed = pendingChange.then(() => changeBooking(session.user, body));
+      const changed = pendingChange.then(() => adminSchedule ? changeSchedule(session.user, body) : changeBooking(session.user, body));
       pendingChange = changed.catch(() => {});
-      const { view, promotion } = await changed;
-      if (promotion && deliverPromotion) {
-        // The inbox and reservation already committed together; failed push cannot undo them.
-        try { await deliverPromotion(promotion); }
-        catch { console.warn('Waitlist promotion push delivery failed.'); }
+      const { view, events } = await changed;
+      if (events?.length) {
+        try {
+          if (deliverPromotions) await deliverPromotions(events);
+          else if (deliverPromotion) await Promise.all(events.map(event => deliverPromotion(event)));
+        } catch { console.warn('Booking notification push delivery failed.'); }
       }
       send(res, 200, view);
       return true;
@@ -171,4 +207,4 @@ function createReservationService({ getStore, commit, ApiError, now = Date.now, 
   return { handle };
 }
 
-module.exports = { createReservationService, CAPACITY };
+module.exports = { createReservationService, CAPACITY, getClassCapacity };

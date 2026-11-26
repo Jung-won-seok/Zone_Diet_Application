@@ -1,0 +1,52 @@
+.coach-schedule-card {
+  max-width: 960px;
+  margin: 12px 0;
+  padding: 14px 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--white);
+}
+
+.coach-schedule-card summary {
+  color: var(--green);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.coach-schedule-body, .coach-schedule-extra, .coach-schedule-form fieldset {
+  display: grid;
+  gap: 14px;
+}
+
+.coach-schedule-body { margin-top: 16px; max-width: 640px; }
+.coach-schedule-form fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.coach-schedule-form fieldset:disabled { opacity: .7; }
+.coach-schedule-form .button { justify-self: start; }
+.coach-schedule-form select, .coach-schedule-form input { width: 100%; min-width: 0; }
+.coach-schedule-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.coach-schedule-form .field { display: grid; gap: 6px; }
+.coach-schedule-state, .coach-schedule-message { margin: 0; font-size: 14px; }
+.coach-schedule-message { color: var(--green); }
+.coach-schedule-message:empty { display: none; }
+
+.coach-schedule-review {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid #d2dfc9;
+  border-radius: 10px;
+  background: #f3f7ee;
+  overflow-wrap: anywhere;
+}
+
+.coach-schedule-review h3, .coach-schedule-review p { margin: 0; }
+.coach-schedule-review h3 { font-size: 16px; }
+.coach-schedule-review p { line-height: 1.6; font-size: 14px; }
+.coach-schedule-review p:empty { display: none; }
+.coach-schedule-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.coach-schedule-card [hidden] { display: none; }
+
+@media (max-width: 480px) {
+  .coach-schedule-card { padding: 12px 14px; }
+  .coach-schedule-actions .button { flex: 1 1 auto; }
+}

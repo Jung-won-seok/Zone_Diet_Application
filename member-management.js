@@ -1,5 +1,14 @@
 let boxMemberPage = null;
 
+function boxMembershipText(pass) {
+  if (pass?.kind === 'period') return '기간권 · ' + pass.expiresOn + '까지';
+  if (pass?.kind === 'visits') {
+    const expiry = pass.expiresOn ? ' · ' + pass.expiresOn + '까지' : '';
+    return '횟수권 · ' + pass.remainingVisits + '회 남음' + expiry;
+  }
+  return '미설정';
+}
+
 function boxMembersView() {
   return `<header class="page-heading"><div><h1>박스 회원 관리</h1>
     <p class="subtitle">등록한 회원은 아이디와 비밀번호로 로그인해 수업을 예약할 수 있습니다.</p></div></header>
@@ -24,6 +33,30 @@ function boxMembersView() {
           <input type="search" id="box-member-search" placeholder="이름 또는 아이디 검색"></div>
           <button id="box-members-refresh" type="button" class="button secondary">새로고침</button></div>
         <div id="box-member-directory"><p role="status">회원 목록을 불러오는 중입니다.</p></div>
+        <dialog id="box-pass-dialog" class="card" aria-labelledby="box-pass-title">
+          <h2 id="box-pass-title">이용권 관리</h2>
+          <p id="box-pass-identity"></p>
+          <form id="box-pass-form" class="form-stack">
+            <div class="field"><label for="box-pass-kind">이용권 종류</label>
+              <select name="kind" id="box-pass-kind">
+                <option value="unassigned">미설정</option><option value="period">기간권</option><option value="visits">횟수권</option>
+              </select></div>
+            <div class="field" data-pass-visits><label for="box-pass-remaining">남은 횟수</label>
+              <input type="number" inputmode="numeric" name="remainingVisits" id="box-pass-remaining" min="0" max="100000" step="1"></div>
+            <div class="field" data-pass-expiry><label for="box-pass-expiry">만료일</label>
+              <input type="date" name="expiresOn" id="box-pass-expiry"></div>
+            <div data-pass-replace hidden>
+              <label class="check-field"><input type="checkbox" name="replacePass" aria-describedby="box-pass-replace-help">새 횟수권으로 교체</label>
+              <p class="box-pass-help" id="box-pass-replace-help">교체 전 예약을 취소해도 그 횟수는 새 이용권에 더해지지 않습니다.</p>
+            </div>
+            <p id="box-pass-feedback" role="status" aria-live="polite"></p>
+            <div class="form-actions">
+              <button type="button" class="button secondary" data-pass-close>닫기</button>
+              <button type="button" class="button secondary" data-pass-reload hidden>최신 이용권 불러오기</button>
+              <button type="submit" class="button">저장</button>
+            </div>
+          </form>
+        </dialog>
         <dialog id="box-recovery-dialog" class="card" aria-labelledby="box-recovery-title">
           <h2 id="box-recovery-title">회원 계정 찾기</h2>
           <p id="box-recovery-identity"></p>
@@ -47,7 +80,7 @@ function boxMembersView() {
 function boxMembersIsDirty() {
   if (!boxMemberPage) return false;
   const fields = boxMemberPage.form.elements;
-  return Boolean(boxMemberPage.busy || fields.name.value || fields.username.value ||
+  return Boolean(boxMemberPage.busy || boxMemberPage.hasPassDraft?.() || fields.name.value || fields.username.value ||
     fields.password.value || fields.zonda.checked);
 }
 
@@ -68,6 +101,12 @@ function mountBoxMembers() {
   const recoveryResult = root.querySelector('#box-recovery-result');
   const recoveryUrl = root.querySelector('#box-recovery-url');
   const recoveryFeedback = root.querySelector('#box-recovery-feedback');
+  const passDialog = root.querySelector('#box-pass-dialog');
+  const passForm = root.querySelector('#box-pass-form');
+  const passFeedback = root.querySelector('#box-pass-feedback');
+  const passSave = passForm.querySelector('[type=submit]');
+  const passReload = passForm.querySelector('[data-pass-reload]');
+  let passTarget = null;
   let recoveryTarget = null;
   const current = { form, busy: false, members: [], readVersion: 0 };
   boxMemberPage = current;
@@ -87,8 +126,11 @@ function mountBoxMembers() {
       const action = member.zonda ? '<span class="badge">참여 중</span>' :
         `<button type="button" class="button secondary" data-enroll-member="${escapeHTML(member.id)}"
           aria-label="${escapeHTML(member.name)} 존다 참여 등록">참여 등록</button>`;
-      return `<div class="directory-row"><strong>${escapeHTML(member.name)}</strong><code>${escapeHTML(member.username)}</code>
+      return `<div class="directory-row"><div class="box-member-identity"><strong>${escapeHTML(member.name)}</strong>
+          <span class="box-member-pass">${escapeHTML(boxMembershipText(member.membership))}</span></div><code>${escapeHTML(member.username)}</code>
         <span>${escapeHTML(team || (member.zonda ? '미배정' : '—'))}</span><div>${action}
+          <button type="button" class="button text" data-pass-member="${escapeHTML(member.id)}"
+            aria-label="${escapeHTML(member.name)} 이용권 관리">이용권 관리</button>
           <button type="button" class="button text" data-recover-member="${escapeHTML(member.id)}"
             aria-label="${escapeHTML(member.name)} 계정 찾기">계정 찾기</button></div></div>`;
     });
@@ -113,6 +155,7 @@ function mountBoxMembers() {
       if (boxMemberPage === current && version === current.readVersion) {
         message.textContent = '';
         acceptDirectory(data);
+        return true;
       }
     } catch (error) {
       if (boxMemberPage === current && version === current.readVersion) {
@@ -154,7 +197,123 @@ function mountBoxMembers() {
     };
     void save('/api/admin/members', member, `${member.name} 회원을 등록했습니다.`, true);
   });
+
+  function configurePassFields() {
+    const fields = passForm.elements;
+    const kind = fields.kind.value;
+    const period = kind === 'period';
+    const visits = kind === 'visits';
+    const replace = visits && passTarget?.membership.kind === 'visits';
+    passForm.querySelector('[data-pass-visits]').hidden = !visits;
+    passForm.querySelector('[data-pass-expiry]').hidden = !(period || visits);
+    passForm.querySelector('[data-pass-replace]').hidden = !replace;
+    passForm.querySelector('label[for=box-pass-expiry]').textContent = visits ? '만료일 (선택)' : '만료일';
+    fields.remainingVisits.disabled = !visits;
+    fields.remainingVisits.required = visits;
+    fields.remainingVisits.max = String(replace && !fields.replacePass.checked
+      ? Math.max(100000, passTarget.membership.remainingVisits) : 100000);
+    fields.expiresOn.disabled = !(period || visits);
+    fields.expiresOn.required = period;
+    fields.replacePass.disabled = !replace;
+    if (!replace) fields.replacePass.checked = false;
+  }
+
+  function showPass(member) {
+    const pass = member.membership || { kind: 'unassigned', expiresOn: null, remainingVisits: null, revision: 0 };
+    passTarget = { id: member.id, membership: pass, saving: false };
+    root.querySelector('#box-pass-identity').textContent = member.name + ' · ' + member.username;
+    const fields = passForm.elements;
+    fields.kind.value = pass.kind;
+    fields.remainingVisits.value = pass.remainingVisits ?? '';
+    fields.expiresOn.value = pass.expiresOn || '';
+    fields.replacePass.checked = false;
+    configurePassFields();
+    passForm.inert = false;
+    passSave.disabled = false;
+    passReload.hidden = true;
+    passFeedback.textContent = '';
+    if (!passDialog.open) passDialog.showModal();
+  }
+
+  current.hasPassDraft = () => {
+    if (!passDialog.open || !passTarget) return false;
+    const fields = passForm.elements, pass = passTarget.membership;
+    return passTarget.saving || fields.kind.value !== pass.kind ||
+      (pass.kind !== 'unassigned' && fields.expiresOn.value !== (pass.expiresOn || '')) ||
+      (pass.kind === 'visits' && (fields.remainingVisits.value !== String(pass.remainingVisits) || fields.replacePass.checked));
+  };
+
+  async function reloadPass() {
+    const target = passTarget;
+    if (!target) return;
+    passSave.disabled = true;
+    passReload.disabled = true;
+    passFeedback.textContent = '최신 이용권을 확인하는 중입니다.';
+    const loaded = await readDirectory();
+    if (boxMemberPage !== current || passTarget !== target) return;
+    passReload.disabled = false;
+    const member = loaded && current.members.find(row => row.id === target.id);
+    if (member) {
+      showPass(member);
+      passFeedback.textContent = '회원의 이용권이 변경되어 최신 값으로 불러왔습니다. 확인한 후 다시 저장하세요.';
+    } else {
+      passFeedback.textContent = '최신 이용권을 불러오지 못했습니다. 다시 시도하세요.';
+      passReload.hidden = false;
+    }
+  }
+
+  passForm.elements.kind.addEventListener('change', configurePassFields);
+  passForm.elements.replacePass.addEventListener('change', configurePassFields);
+  passForm.querySelector('[data-pass-close]').addEventListener('click', () => passDialog.close());
+  passDialog.addEventListener('cancel', event => { if (passTarget?.saving) event.preventDefault(); });
+  passDialog.addEventListener('close', () => {
+    const id = passTarget?.id;
+    passTarget = null;
+    const opener = [...list.querySelectorAll('[data-pass-member]')].find(button => button.dataset.passMember === id);
+    opener?.focus();
+  });
+  passReload.addEventListener('click', reloadPass);
+  passForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    const target = passTarget;
+    if (!target || target.saving || passSave.disabled) return;
+    const fields = passForm.elements;
+    const kind = fields.kind.value;
+    const payload = {
+      memberId: target.id, revision: target.membership.revision, kind,
+      expiresOn: kind !== 'unassigned' && fields.expiresOn.value ? fields.expiresOn.value : null,
+      remainingVisits: kind === 'visits' ? Number(fields.remainingVisits.value) : null
+    };
+    if (!fields.replacePass.disabled && fields.replacePass.checked) payload.replacePass = true;
+    target.saving = true;
+    passFeedback.textContent = '저장 중입니다.';
+    passForm.inert = true;
+    try {
+      const membership = await api('/api/admin/members/membership', { method: 'PUT', body: JSON.stringify(payload) });
+      if (boxMemberPage !== current || passTarget !== target) return;
+      current.readVersion++;
+      refresh.disabled = false;
+      current.members = current.members.map(member => member.id === target.id ? { ...member, membership } : member);
+      paintList();
+      passDialog.close();
+      message.textContent = '이용권을 저장했습니다. ' + boxMembershipText(membership);
+    } catch (error) {
+      if (boxMemberPage !== current || passTarget !== target) return;
+      if (error.status === 409) await reloadPass();
+      else passFeedback.textContent = error.message;
+    } finally {
+      target.saving = false;
+      passForm.inert = false;
+    }
+  });
+
   list.addEventListener('click', event => {
+    const passButton = event.target.closest('[data-pass-member]');
+    if (passButton) {
+      const member = current.members.find(row => row.id === passButton.dataset.passMember);
+      if (member) showPass(member);
+      return;
+    }
     const recover = event.target.closest('[data-recover-member]');
     if (recover) {
       const member = current.members.find(entry => entry.id === recover.dataset.recoverMember);

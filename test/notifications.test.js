@@ -113,6 +113,58 @@ test('service worker details require device ownership, a live confirmed seat and
   assert.equal((await h.request('GET', query)).registered, false);
 });
 
+test('class cancellation keeps its reason and the original booking status after deleting the roster; unrelated members and legacy workers get no cancellation details', async () => {
+  const h = harness();
+  await h.subscribe();
+  const query = '?device=' + createHash('sha256').update(endpoint).digest('hex');
+  const affected = [];
+  for (const previousStatus of ['confirmed', 'waiting']) {
+    const memberId = previousStatus === 'confirmed' ? 'member' : 'waiter';
+    const cancellation = { ...event, memberId, id: 'cancel-' + memberId, type: 'class_cancelled', previousStatus, reason: '박스 시설 점검' };
+    affected.push(cancellation);
+    await h.commit(h.service.recordPromotion(h.store, cancellation));
+    const inbox = await h.request('GET', '?format=2', {}, { id: memberId });
+    assert.equal(inbox.items[0].previousStatus, previousStatus);
+    assert.ok(inbox.items[0].message.includes(event.date + ' ' + event.startTime));
+    assert.match(inbox.items[0].message, previousStatus === 'confirmed' ? /예약이 취소/ : /대기가 취소/);
+    assert.match(inbox.items[0].message, /박스 시설 점검/);
+  }
+  assert.equal((await h.request('GET', '', {}, { id: 'unrelated' })).items.length, 0);
+  assert.equal((await h.request('GET', '')).items.length, 0);
+  assert.equal((await h.request('GET', query)).latest, null);
+  const modernWorker = await h.request('GET', query + '&format=2');
+  assert.equal(modernWorker.latest.id, affected[0].id);
+  assert.match(modernWorker.latest.message, /박스 시설 점검/);
+  assert.equal((await h.request('GET', query + '&format=2', {}, { id: 'waiter' })).latest, null);
+  const removed = { ...event, type: 'waitlist_removed', id: 'pass-expired', previousStatus: 'waiting', reason: '회원권이 만료되었습니다.' };
+  await h.commit(h.service.recordPromotion(h.store, removed));
+  const notice = (await h.request('GET', query + '&format=2')).latest;
+  assert.ok(notice.message.includes('수업 대기가 취소'));
+  assert.match(notice.message, /회원권이 만료/);
+  assert.doesNotMatch(notice.message, /휴강|확정됐어요/);
+});
+
+test('a full-day batch wakes each affected device once and prunes stale devices without touching unrelated subscriptions', async () => {
+  const sent = [];
+  const h = harness(async url => { sent.push(url); return { status: url === endpoint ? 410 : 201 }; });
+  const apple = 'https://web.push.apple.com/device-b';
+  await h.subscribe();
+  await h.subscribe({ id: 'waiter' }, apple);
+  await h.subscribe({ id: 'unrelated' }, 'https://web.push.apple.com/device-c');
+  const events = [event,
+    { ...event, type: 'class_cancelled', id: 'cancel-a', dayClosed: true, previousStatus: 'confirmed', reason: '임시 휴무' },
+    { ...event, type: 'class_cancelled', memberId: 'waiter', id: 'cancel-b', dayClosed: true, previousStatus: 'waiting', reason: '임시 휴무' }];
+  const changes = events.reduce(h.service.recordPromotion, h.store);
+  await h.commit(changes);
+  await h.service.deliverPromotions(events);
+  assert.deepEqual(sent.sort(), [endpoint, apple].sort());
+  const inbox = (await h.request('GET', '?format=2')).items;
+  assert.equal(inbox.length, 2);
+  assert.match(inbox[0].message, /박스 휴관/);
+  assert.equal((await h.request('GET', '')).devices.length, 0);
+  assert.equal((await h.request('GET', '', {}, { id: 'unrelated' })).devices.length, 1);
+});
+
 test('expired subscriptions are pruned, acceptance errors preserve the inbox, expired class sends nothing', async () => {
   const h = harness(async url => {
     if (url === endpoint) return { status: 410 };
@@ -143,16 +195,22 @@ test('promotions reuse the service JWT and renew it near expiry within the exist
 
 test('worker shows private schedule details only for authenticated device and safe date; expired sessions use a generic alert', async () => {
   const source = readFileSync(require.resolve('../push-worker.js'), 'utf8');
-  for (const allowed of [true, false]) {
+  const cancelled = { ...event, type: 'class_cancelled', message: event.date + ' ' + event.startTime + ' 수업이 휴강되어 예약이 취소됐어요. 사유 · 시설 점검' };
+  for (const [allowed, item] of [[true, event], [true, cancelled], [false, cancelled]]) {
     const listeners = {}, shown = [];
     const self = { registration: { pushManager: { getSubscription: async () => ({ endpoint }) }, showNotification: async (...args) => shown.push(args) },
       clients: { matchAll: async () => [] }, addEventListener: (event, fn) => { listeners[event] = fn; } };
-    const fetch = async () => ({ ok: allowed, json: async () => ({ registered: true, latest: event }) });
+    const fetch = async url => {
+      assert.match(url, /format=2/);
+      return { ok: allowed, json: async () => ({ registered: true, latest: item }) };
+    };
     vm.runInNewContext(source, { self, crypto: require('node:crypto').webcrypto, TextEncoder, fetch, AbortSignal });
     let work;
     listeners.push({ waitUntil: promise => { work = promise; } }); await work;
     assert.equal(shown.length, 1);
     assert.equal(shown[0][1].body.includes(event.startTime), allowed);
     assert.equal(shown[0][1].data.route, allowed ? '/#reservations/' + event.date : '/#reservations');
+    if (allowed && item.type === 'class_cancelled') assert.equal(shown[0][1].body, cancelled.message);
+    if (!allowed) assert.doesNotMatch(shown[0][1].body, /시설 점검/);
   }
 });

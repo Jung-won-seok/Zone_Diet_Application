@@ -1,4 +1,5 @@
 const { createHash, randomBytes, randomUUID } = require('node:crypto');
+const { membershipView } = require('./memberships-server');
 
 const recoveryLifetime = 15 * 60 * 1000;
 const digestToken = token => createHash('sha256').update(token).digest('hex');
@@ -10,7 +11,7 @@ function createBoxMemberService({ getStore, commit, ApiError, makeUser, blankPer
     const members = store.users.filter(user => !user.isAdmin).map(user => {
       const assignment = assignments.get(user.id);
       return {
-        id: user.id, username: user.username, name: user.name,
+        id: user.id, username: user.username, name: user.name, membership: membershipView(store, user.id),
         zonda: Boolean(assignment), teamId: assignment?.teamId ?? null,
         role: assignment?.role || '', customRole: assignment?.customRole || ''
       };

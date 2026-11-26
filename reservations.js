@@ -21,9 +21,9 @@ function shiftBookingDate(date, days) {
 
 function reservationsView() {
   return `<div class="box-schedule-heading"><h1>수업 예약</h1>
-    <p>평일 수업은 전날 00:00(한국 시간)에 예약을 엽니다. 대기 신청을 포함해 하루 한 수업만 신청할 수 있습니다.</p>
-    <p>수업당 정원 18명 · 대기 2명. 확정자가 취소하면 대기 순서대로 자동 승격됩니다.</p></div>
-    <div id="booking-notifications"></div><div id="box-schedule"></div>`;
+    <p>예약은 수업 전날 00:00(한국 시간)에 열립니다. 대기 신청을 포함해 하루 한 수업만 신청할 수 있습니다.</p>
+    <p>확정자가 취소하면 대기 순서대로 자동 승격됩니다.</p></div>
+    <div id="booking-notifications"></div><div id="coach-schedule"></div><div id="box-schedule"></div>`;
 }
 
 function cleanupReservations() {
@@ -41,10 +41,12 @@ function bookingCalendar(page) {
     const day = new Date(date + 'T12:00:00Z');
     const current = date === page.date;
     const today = date === page.today;
-    const weekend = offset >= 5;
-    const label = bookingDayLabel.format(day) + (today ? ' 오늘' : '') + (weekend ? ' 휴무' : '');
+    const override = page.data?.weekOverrides?.[date];
+    const scheduleLabel = override === 'closed' ? '휴강' : override === 'special' ? '특별' : '';
+    const dayLabels = [today ? '오늘' : '', scheduleLabel].filter(Boolean).join('·');
+    const label = bookingDayLabel.format(day) + (dayLabels ? ' ' + dayLabels : '');
     return `<a class="booking-day" href="#reservations/${date}" aria-label="${label}" ${current ? 'aria-current="date"' : ''}>
-      <span>${bookingWeekday.format(day)}</span><strong>${day.getUTCDate()}</strong><small>${today && weekend ? '오늘·휴무' : weekend ? '휴무' : today ? '오늘' : ''}</small></a>`;
+      <span>${bookingWeekday.format(day)}</span><strong>${day.getUTCDate()}</strong><small>${dayLabels}</small></a>`;
   }).join('');
   return `<section class="booking-calendar" aria-label="예약 날짜 선택" data-no-swipe>
     <div class="booking-calendar-head"><div class="booking-week-controls">
@@ -67,6 +69,10 @@ function bookingRoster(slot) {
 }
 
 function bookingAvailabilityNotice(data) {
+  if (data?.dayClosed) {
+    const label = data.classes?.some(slot => slot.started && !slot.cancelled) ? '남은 수업 휴강' : '하루 휴강';
+    return `<p class="booking-day-notice is-cancelled"><strong>${label}</strong>${data.scheduleReason ? ' · ' + escapeHTML(data.scheduleReason) : ''}</p>`;
+  }
   if (!data?.classes.length) return '';
   let text = '';
   if (data.notOpenYet) {
@@ -75,19 +81,45 @@ function bookingAvailabilityNotice(data) {
     const booked = data.classes.find(slot => slot.startTime === data.myClassStartTime);
     if (booked) {
       const status = booked.myStatus === 'waiting' ? `대기 ${booked.myWaitlistPosition}번` : '예약 확정';
-      const next = booked.closed ? '수업이 시작되어 변경할 수 없습니다.' : '확정 자리가 있는 다른 수업으로 시간을 변경할 수 있습니다.';
+      const { expired, exhausted } = bookingMembershipStatus(data.membership, data.date);
+      let next = '확정 자리가 있는 다른 수업으로 시간을 변경할 수 있습니다.';
+      if (expired || (exhausted && booked.myStatus === 'waiting')) next = '수업 시작 전까지 신청을 취소할 수 있습니다.';
+      if (booked.closed) next = '수업이 시작되어 변경할 수 없습니다.';
       text = `이날 내 수업은 ${booked.startTime} (${status})입니다. ${next}`;
     }
   }
   return text ? `<p class="booking-day-notice">${escapeHTML(text)}</p>` : '';
 }
 
-function bookingClassRow(slot, isAdmin, booked) {
+function bookingMembershipStatus(membership, date) {
+  if (!membership || membership.kind === 'unassigned') return { expired: false, exhausted: false };
+  return {
+    expired: Boolean(membership.expiresOn && membership.expiresOn < date),
+    exhausted: membership.kind === 'visits' && membership.remainingVisits === 0
+  };
+}
+
+function bookingMembershipCard(membership, date) {
+  if (!membership) return '';
+  const { expired, exhausted } = bookingMembershipStatus(membership, date);
+  let description = '등록된 회원권이 없습니다. 수업 예약은 가능합니다.';
+  if (membership.kind === 'period') description = '기간권';
+  if (membership.kind === 'visits') description = `횟수권 · 잔여 ${escapeHTML(membership.remainingVisits)}회`;
+  if (membership.expiresOn) description += ` · ${escapeHTML(membership.expiresOn)}까지`;
+  const restriction = expired ? '선택한 수업일은 회원권 유효기간이 지났습니다.'
+    : exhausted ? '남은 횟수가 없어 새 수업을 신청할 수 없습니다.' : '';
+  return `<section class="booking-membership" aria-label="내 회원권"><h2>내 회원권</h2>
+    <p>${description}</p>${restriction ? '<p class="booking-membership-limit">' + restriction + '</p>' : ''}</section>`;
+}
+
+function bookingClassRow(slot, isAdmin, booked, membership, date, dayReason) {
   const waiting = slot.myStatus === 'waiting';
   const mine = waiting || slot.myStatus === 'confirmed';
   const available = slot.confirmedCount < slot.capacity;
   const full = !available && slot.waitlistCount >= slot.waitlistCapacity;
   const otherClass = Boolean(booked && booked.startTime !== slot.startTime);
+  const { expired, exhausted } = bookingMembershipStatus(membership, date);
+  const membershipBlocked = !isAdmin && (expired || (exhausted && booked?.myStatus !== 'confirmed'));
   let status = available ? '예약 가능' : full ? '정원·대기 마감' : '대기 가능';
   if (otherClass && !available) status = '변경할 자리 없음';
   if (slot.notOpenYet) status = '예약 오픈 전';
@@ -96,9 +128,11 @@ function bookingClassRow(slot, isAdmin, booked) {
     status = waiting ? `내 대기 ${slot.myWaitlistPosition}번` : '내 예약 확정';
     if (slot.closed) status += ' · 접수 종료';
   }
+  if (!mine && !slot.closed && !slot.notOpenYet && membershipBlocked) status = expired ? '회원권 만료' : '잔여 횟수 없음';
+  if (slot.cancelled) status = '휴강';
   let action = '';
   const canChange = otherClass && !booked.closed && available;
-  if (!isAdmin && !slot.notOpenYet && !slot.closed && (mine || canChange || (!full && !otherClass))) {
+  if (!isAdmin && !slot.cancelled && !slot.notOpenYet && !slot.closed && (mine || (!membershipBlocked && (canChange || (!full && !otherClass))))) {
     let operation = 'reserve';
     let label = available ? '예약하기' : '대기 신청';
     if (mine) {
@@ -112,12 +146,17 @@ function bookingClassRow(slot, isAdmin, booked) {
       data-book-time="${escapeHTML(slot.startTime)}" data-book-action="${operation}"
       aria-label="${escapeHTML(slot.startTime)} 수업 ${label}">${label}</button>`;
   }
-  return `<li class="booking-row${mine ? ' is-mine' : ''}${slot.closed ? ' is-closed' : ''}">
+  const special = slot.kind === 'special'
+    ? `<p class="booking-special"><strong>특별 수업</strong>${slot.label && slot.label !== '특별 수업' ? ' · ' + escapeHTML(slot.label) : ''}</p>` : '';
+  const reason = slot.cancelled && slot.cancelReason && slot.cancelReason !== dayReason
+    ? `<p class="booking-cancel-reason">휴강 사유 · ${escapeHTML(slot.cancelReason)}</p>` : '';
+  return `<li class="booking-row${mine ? ' is-mine' : ''}${slot.closed ? ' is-closed' : ''}${slot.cancelled ? ' is-cancelled' : ''}">
+    ${special}
     <div class="booking-row-main">
       <div class="booking-time"><strong>${escapeHTML(slot.startTime)}</strong><span>– ${escapeHTML(slot.endTime)}</span></div>
       <div class="booking-occupancy"><span>예약 <b>${slot.confirmedCount}</b> / ${slot.capacity}</span><span>대기 <b>${slot.waitlistCount}</b> / ${slot.waitlistCapacity}</span></div>
       <div class="booking-state"><span>${status}</span></div>
-      ${action}</div>${isAdmin ? bookingRoster(slot) : ''}</li>`;
+      ${action}</div>${reason}${isAdmin && !slot.cancelled ? bookingRoster(slot) : ''}</li>`;
 }
 
 function paintReservationDay(page) {
@@ -128,13 +167,18 @@ function paintReservationDay(page) {
   let schedule;
   if (page.data) {
     const booked = page.data.classes.find(slot => slot.startTime === page.data.myClassStartTime);
-    schedule = page.data.classes.length
-      ? bookingAvailabilityNotice(page.data) + `<ul class="booking-list">${page.data.classes.map(slot => bookingClassRow(slot, session.isAdmin, booked)).join('')}</ul>`
-      : '<p class="booking-empty">주말은 휴무입니다. 평일 날짜를 선택해주세요.</p>';
+    schedule = bookingAvailabilityNotice(page.data);
+    if (page.data.classes.length) {
+      schedule += `<ul class="booking-list">${page.data.classes.map(slot =>
+        bookingClassRow(slot, session.isAdmin, booked, page.data.membership, page.date, page.data.scheduleReason)
+      ).join('')}</ul>`;
+    } else if (!page.data.dayClosed) {
+      schedule += '<p class="booking-empty">이 날짜에는 등록된 수업이 없습니다.</p>';
+    }
   } else {
     schedule = page.error ? '' : '<p class="booking-empty" role="status">수업을 불러오는 중입니다.</p>';
   }
-  host.innerHTML = bookingCalendar(page) +
+  host.innerHTML = (session.isAdmin ? '' : bookingMembershipCard(page.data?.membership, page.date)) + bookingCalendar(page) +
     `<section aria-label="선택한 날짜의 수업"><div class="booking-list-head"><h2>${label}</h2>
       <button type="button" class="booking-refresh" data-book-refresh>새로고침</button></div>
       <p class="booking-feedback" role="status" aria-live="polite"></p>${schedule}</section>`;
@@ -144,6 +188,7 @@ function paintReservationDay(page) {
   feedback.classList.toggle('is-error', Boolean(page.error));
   feedback.hidden = !feedback.textContent;
   host.querySelectorAll('button').forEach(button => { button.disabled = page.busy; });
+  if (page.coachHost) paintCoachSchedule(page.coachHost, page, () => loadReservationDay(page));
 }
 
 function scheduleReservationRefresh(page) {
@@ -251,6 +296,7 @@ function mountReservations(date) {
   const today = bookingKoreaDate.format(new Date());
   const hasDate = validBookingDate(date);
   const page = { host, date: hasDate ? date : today, today, useServerDate: !hasDate, data: null, busy: false, error: '', message: '' };
+  if (session.isAdmin) page.coachHost = document.querySelector('#coach-schedule');
   reservationPage = page;
   host.onchange = event => {
     if (event.target.id === 'booking-date' && validBookingDate(event.target.value)) location.hash = 'reservations/' + event.target.value;

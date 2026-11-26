@@ -1,8 +1,33 @@
 const { createHash, createPrivateKey, generateKeyPairSync, sign } = require('node:crypto');
-const { CAPACITY } = require('./reservations-server');
+const { getClassCapacity } = require('./schedule-server');
 
 const inboxLimit = 50;
 const maxDevices = 8;
+const dayInMs = 24 * 3600 * 1000;
+const pushConcurrency = 24;
+
+function isRemoval(item) { return item.type === 'class_cancelled' || item.type === 'waitlist_removed'; }
+
+function inboxItem(item) {
+  const when = item.date + ' ' + item.startTime;
+  let message;
+  if (item.type === 'class_cancelled') {
+    const booking = item.previousStatus === 'waiting' ? '대기가' : '예약이';
+    message = item.dayClosed
+      ? when + ' 수업 ' + booking + ' 박스 휴관으로 취소됐어요.'
+      : when + ' 수업이 휴강되어 ' + booking + ' 취소됐어요.';
+  } else if (item.type === 'waitlist_removed') {
+    message = when + ' 수업 대기가 취소됐어요.';
+  } else {
+    message = when + ' 대기하던 수업의 예약이 확정됐어요.';
+  }
+  if (isRemoval(item) && item.reason) message += ' 사유 · ' + item.reason;
+  return { ...item, message };
+}
+
+function notificationExpiresAt(item) {
+  return isRemoval(item) ? Date.parse(item.createdAt) + dayInMs : Date.parse(item.date + 'T' + item.startTime + ':00+09:00');
+}
 
 function pushEndpoint(input) {
   if (typeof input !== 'string' || input.length > 2048) return null;
@@ -62,8 +87,15 @@ function createNotificationService({ getStore, commit, ApiError, now = Date.now,
     const existing = store.promotionInbox?.[event.memberId] || [];
     if (existing.some(item => item.id === event.id)) return store;
     const { id, date, startTime, createdAt } = event;
+    const item = { id, date, startTime, createdAt, read: false };
+    if (isRemoval(event)) {
+      item.type = event.type;
+      item.previousStatus = event.previousStatus;
+      item.reason = event.reason || '';
+      if (event.dayClosed) item.dayClosed = true;
+    }
     const updated = { ...store, promotionInbox: { ...store.promotionInbox,
-      [event.memberId]: [{ id, date, startTime, createdAt, read: false }, ...existing].slice(0, inboxLimit) } };
+      [event.memberId]: [item, ...existing].slice(0, inboxLimit) } };
     if (store.bookingPushKeys) {
       const targets = Object.entries(store.bookingPushDevices || {}).filter(([, device]) => device.memberId === event.memberId);
       const endpoints = targets.map(([, device]) => device.endpoint);
@@ -77,24 +109,38 @@ function createNotificationService({ getStore, commit, ApiError, now = Date.now,
     return updated;
   }
 
-  async function deliverPromotion(event) {
+  async function deliverPromotions(events) {
     const store = getStore(), keys = store.bookingPushKeys;
-    if (!keys) return;
-    const secondsLeft = Math.ceil((Date.parse(event.date + 'T' + event.startTime + ':00+09:00') - now()) / 1000);
-    if (!(secondsLeft > 0)) return;
-    const devices = Object.entries(store.bookingPushDevices || {}).filter(([, d]) => d.memberId === event.memberId).slice(0, maxDevices);
+    if (!keys || !events.length) return;
+    const recipients = new Map(events.map(event => [event.memberId, event]));
+    const devices = Object.entries(store.bookingPushDevices || {}).filter(([, device]) => recipients.has(device.memberId));
+    if (!devices.length) return;
+    // A full day can include many members. Send one wake-up per affected device
+    // within a shared deadline, leaving all notices in the privately persisted inbox.
+    const deadline = AbortSignal.timeout(12000);
+    const jobs = devices.values();
     const expired = [];
-    await Promise.allSettled(devices.map(async ([id, device]) => {
+    async function sendDevice(id, device) {
+      const event = recipients.get(device.memberId);
+      const secondsLeft = Math.ceil((notificationExpiresAt(event) - now()) / 1000);
+      if (secondsLeft <= 0 || !Number.isFinite(secondsLeft) || (device.latestPromotionId && device.latestPromotionId !== event.id)) return;
       const endpoint = pushEndpoint(device.endpoint);
       if (!endpoint) return;
       const authorization = keys.authorizations?.[new URL(endpoint).origin];
       if (!authorization || authorization.expiresAt <= now()) return;
-      const response = await fetchImpl(endpoint, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(3500),
+      const response = await fetchImpl(endpoint, { method: 'POST', redirect: 'error', signal: AbortSignal.any([deadline, AbortSignal.timeout(3500)]),
         headers: { TTL: String(Math.min(secondsLeft, 24 * 3600)), Urgency: 'high', 'Content-Length': '0',
           Authorization: authorization.header } });
       if (response.status === 404 || response.status === 410) expired.push([id, device]);
       if (response.body) await response.body.cancel();
-    }));
+    }
+    async function work() {
+      for (const [id, device] of jobs) {
+        if (deadline.aborted) break;
+        try { await sendDevice(id, device); } catch { /* Other recipients can still receive their notice. */ }
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(pushConcurrency, devices.length) }, work));
     if (expired.length) {
       const current = getStore(), next = { ...current.bookingPushDevices };
       for (const [id, old] of expired) if (next[id] === old) delete next[id];
@@ -111,20 +157,23 @@ function createNotificationService({ getStore, commit, ApiError, now = Date.now,
     if (route === base && req.method === 'GET') {
       const store = getStore(), items = store.promotionInbox?.[memberId] || [];
       const device = url.searchParams.get('device');
+      const typedNotices = url.searchParams.get('format') === '2';
       if (device !== null) {
         const target = /^[a-f0-9]{64}$/.test(device) && store.bookingPushDevices?.[device];
         const registered = target?.memberId === memberId;
-        // A phone may be shared, signed out, or receive an old push after a cancellation.
-        // Only an active, unread confirmation for this member and registered device is eligible.
+        // Removal notices survive removal from the roster. Older workers which
+        // always show a confirmation receive only a generic wake-up for removals.
         const latest = registered && items.find(item => {
-          const starts = Date.parse(item.date + 'T' + item.startTime + ':00+09:00');
+          if (item.id !== target.latestPromotionId || item.read || notificationExpiresAt(item) <= now()) return false;
+          if (isRemoval(item)) return typedNotices;
           const queue = store.classReservations?.[item.date]?.[item.startTime] || [];
           const position = queue.indexOf(memberId);
-          return item.id === target.latestPromotionId && !item.read && starts > now() && position >= 0 && position < CAPACITY;
+          return position >= 0 && position < getClassCapacity(store, item.date, item.startTime);
         });
-        send(res, 200, { registered: Boolean(registered), latest: latest || null });
+        send(res, 200, { registered: Boolean(registered), latest: latest ? inboxItem(latest) : null });
       } else {
-        send(res, 200, { memberId, items, devices: Object.entries(store.bookingPushDevices || {}).filter(([, d]) => d.memberId === memberId).map(([id]) => id) });
+        const visible = typedNotices ? items : items.filter(item => !isRemoval(item));
+        send(res, 200, { memberId, items: visible.map(inboxItem), devices: Object.entries(store.bookingPushDevices || {}).filter(([, d]) => d.memberId === memberId).map(([id]) => id) });
       }
       return true;
     }
@@ -164,7 +213,7 @@ function createNotificationService({ getStore, commit, ApiError, now = Date.now,
     }
     return false;
   }
-  return { handle, recordPromotion, deliverPromotion };
+  return { handle, recordPromotion, deliverPromotion: event => deliverPromotions([event]), deliverPromotions };
 }
 
 module.exports = { createNotificationService };

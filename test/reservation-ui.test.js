@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 const reservationSource = fs.readFileSync(require.resolve('../reservations'), 'utf8');
-const ui = vm.createContext({ escapeHTML: value => String(value) });
+const ui = vm.createContext({ escapeHTML: value => String(value ?? '').replace(/[&<>]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[char])) });
 vm.runInContext(reservationSource, ui);
 
 function slot(changes = {}) {
@@ -63,14 +63,44 @@ test('member rows hide the roster and admins can see the reserve and wait lists'
   assert.doesNotMatch(adminRow, /data-book-action/);
 });
 
-test('the week view labels both weekend days as closed', () => {
-  const calendar = ui.bookingCalendar({ date: '2027-01-01', today: '2026-12-31' });
-  for (const day of ['2027-01-02', '2027-01-03']) {
-    const weekend = calendar.match(new RegExp('<a[^>]*href="#reservations/' + day + '"[^>]*>[\\s\\S]*?</a>'));
-    assert.ok(weekend);
-    assert.match(weekend[0], /휴무/);
-  }
+test('the week distinguishes a holiday closure, a weekend special and a day without exceptions', () => {
+  const calendar = ui.bookingCalendar({ date: '2027-01-01', today: '2026-12-31',
+    data: { weekOverrides: { '2027-01-01': 'closed', '2027-01-02': 'special' } } });
+  const calendarLink = day => calendar.match(new RegExp('<a[^>]*href="#reservations/' + day + '"[^>]*>[\\s\\S]*?</a>'))[0];
+  assert.match(calendarLink('2027-01-01'), /휴강/);
+  assert.match(calendarLink('2027-01-02'), /특별/);
+  assert.doesNotMatch(calendarLink('2027-01-03'), /휴무|휴강|특별/);
   assert.match(calendar, /#reservations\/2026-12-28/);
+});
+
+test('members can read a closure reason and special capacity in place of ordinary booking actions', () => {
+  const cancelled = slot({ kind: 'special', label: '팀 와드 <1>', capacity: 8, waitlistCapacity: 1,
+    cancelled: true, closed: true, cancelReason: '보수 <점검>' });
+  const html = ui.bookingClassRow(cancelled, false, null);
+  assert.match(html, /특별 수업/);
+  assert.match(html, /팀 와드 &lt;1&gt;/);
+  assert.match(html, /휴강 사유 · 보수 &lt;점검&gt;/);
+  assert.match(html, /\/ 8/);
+  assert.doesNotMatch(html, /data-book-action/);
+  assert.match(ui.bookingAvailabilityNotice({ dayClosed: true, classes: [] }), /하루 휴강/);
+  assert.match(ui.bookingAvailabilityNotice({ dayClosed: true, classes: [slot({ started: true }), cancelled] }), /남은 수업 휴강/);
+});
+
+test('visit and expiry cards match actions on the chosen class date, including cancellation at zero', () => {
+  const date = '2027-01-05';
+  const expired = { kind: 'period', expiresOn: '2027-01-04', remainingVisits: null };
+  const empty = { kind: 'visits', remainingVisits: 0, expiresOn: date };
+  const mine = slot({ myStatus: 'confirmed' });
+  const next = slot({ startTime: '18:30' });
+  assert.match(ui.bookingMembershipCard(empty, date), /잔여 0회/);
+  assert.match(ui.bookingMembershipCard(expired, date), /유효기간이 지났습니다/);
+  assert.doesNotMatch(ui.bookingClassRow(next, false, null, expired, date), /data-book-action/);
+  assert.doesNotMatch(ui.bookingClassRow(next, false, null, empty, date), /data-book-action/);
+  assert.match(ui.bookingClassRow(mine, false, mine, expired, date), /data-book-action="cancel"/);
+  assert.match(ui.bookingClassRow(next, false, mine, empty, date), /data-book-action="change"/);
+  assert.doesNotMatch(ui.bookingClassRow(next, false, { ...mine, myStatus: 'waiting' }, empty, date), /data-book-action/);
+  assert.match(ui.bookingClassRow(next, false, null, { ...expired, expiresOn: date }, date), /data-book-action="reserve"/);
+  assert.match(ui.bookingClassRow(next, false, null, { kind: 'unassigned' }, date), /data-book-action="reserve"/);
 });
 
 const bookingRequest = { date: '2026-12-07', startTime: '09:40', action: 'reserve' };
