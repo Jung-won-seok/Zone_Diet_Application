@@ -16,26 +16,38 @@ function guideEnglishLabel(entry) {
 
 function benchmarkSummary(entry) {
   if (entry.amrapMinutes) return { format: 'AMRAP', goal: '최대한 많이 반복', label: '제한 시간', amount: entry.amrapMinutes + '분' };
+  if (entry.emomMinutes) return { format: 'EMOM', goal: '매분 한 라운드 시작', label: '운동 시간', amount: entry.emomMinutes + '분' };
   const rounds = entry.roundReps?.length || entry.rounds;
   const summary = { format: 'For Time', goal: '완료 시간 측정' };
   if (rounds) return { ...summary, label: '라운드 수', amount: rounds + '라운드' };
   if (entry.steps.length === 1) return { ...summary, label: '총 반복 횟수', amount: entry.steps[0].amount };
-  return { ...summary, label: '운동 구성', amount: entry.steps.length + '개 동작' };
+  return { ...summary, label: '운동 구성', amount: entry.steps.length + '단계' };
+}
+
+function guideFacts(entry) {
+  if (entry.category === 'movement') {
+    return [{ label: '동작 유형', value: entry.family }, { label: '사용 장비', value: entry.equipment }];
+  }
+  if (entry.category === 'term') {
+    return [{ label: '용어 분류', value: entry.topic }, { label: '와드 표기 예시', value: entry.notation, english: true }];
+  }
+  const { format, goal, label, amount } = benchmarkSummary(entry);
+  return [{ label: '운동 방식', value: format, english: true, note: goal }, { label, value: amount }];
+}
+
+function guideFactValue(fact) {
+  const value = escapeHTML(fact.value);
+  return fact.english ? `<span lang="en">${value}</span>` : value;
 }
 
 function guideResultRow(entry) {
-  const isBenchmark = entry.category === 'benchmark';
-  const name = `<strong>${escapeHTML(entry.name)}</strong><small lang="en">${escapeHTML(guideEnglishLabel(entry))}</small>`;
-  let content = name;
-  if (isBenchmark) {
-    const { format, amount } = benchmarkSummary(entry);
-    content = `<span class="benchmark-name">${name}</span>
-      <span class="benchmark-card-format"><span lang="en">${format}</span> · ${escapeHTML(amount)}</span>
-      <span class="benchmark-card-moves">${entry.steps.map(step => escapeHTML(step.name)).join(' · ')}</span>`;
-  }
-  return `<li><button type="button" class="guide-row${isBenchmark ? ' guide-benchmark-row' : ''}"
-      data-guide-entry="${escapeHTML(entry.id)}" aria-haspopup="dialog">
-      <span>${content}</span><span aria-hidden="true" class="guide-chevron">›</span></button></li>`;
+  const facts = guideFacts(entry).map(guideFactValue).join(' · ');
+  const description = entry.category === 'benchmark' ? entry.steps.map(step => step.name).join(' · ') : entry.description;
+  return `<li><button type="button" class="guide-row" data-guide-entry="${escapeHTML(entry.id)}" aria-haspopup="dialog">
+      <span><span class="guide-card-name"><strong>${escapeHTML(entry.name)}</strong><small lang="en">${escapeHTML(guideEnglishLabel(entry))}</small></span>
+        <span class="guide-card-facts">${facts}</span>
+        <span class="guide-card-description">${escapeHTML(description)}</span></span>
+      <span aria-hidden="true" class="guide-chevron">›</span></button></li>`;
 }
 
 function guideView() {
@@ -60,7 +72,7 @@ function guideResultGroups(entries) {
     const matches = entries.filter(item => item.category === category);
     if (!matches.length) return '';
     const rows = matches.map(guideResultRow).join('');
-    return `<section class="guide-group${category === 'benchmark' ? ' guide-benchmarks' : ''}" aria-labelledby="guide-title-${category}">
+    return `<section class="guide-group" aria-labelledby="guide-title-${category}">
       <h2 id="guide-title-${category}">${label} <span>${matches.length}</span></h2>
       <ul>${rows}</ul></section>`;
   }).join('');
@@ -99,9 +111,6 @@ function guideVideoButton(id) {
 }
 
 function benchmarkDetail(entry) {
-  const { format, goal, label, amount } = benchmarkSummary(entry);
-  const summary = `<dl class="benchmark-summary"><div><dt>운동 방식</dt><dd><span lang="en">${format}</span><small>${goal}</small></dd></div>
-    <div><dt>${label}</dt><dd>${escapeHTML(amount)}</dd></div></dl>`;
   let workout;
   if (entry.roundReps) {
     const columns = entry.steps.map(step => '<th scope="col">' + escapeHTML(step.name) + '</th>').join('');
@@ -110,7 +119,7 @@ function benchmarkDetail(entry) {
     workout = `<section><h3>라운드별 운동 순서</h3><table class="benchmark-rounds"><caption class="sr-only">${escapeHTML(entry.name)} 라운드별 동작과 횟수</caption>
       <thead><tr><th scope="col">라운드</th>${columns}</tr></thead><tbody>${rows}</tbody></table></section>`;
   } else {
-    const title = entry.amrapMinutes || entry.rounds ? '한 라운드의 운동 순서' : '운동 구성';
+    const title = entry.amrapMinutes || entry.emomMinutes || entry.rounds ? '한 라운드의 운동 순서' : '운동 구성';
     const steps = entry.steps.map(step => `<li><div><span>${escapeHTML(step.name)}</span><strong>${escapeHTML(step.amount)}</strong></div></li>`).join('');
     workout = `<section><h3>${title}</h3><ol class="benchmark-steps">${steps}</ol></section>`;
   }
@@ -119,11 +128,23 @@ function benchmarkDetail(entry) {
       <thead><tr><th scope="col">항목</th><th scope="col">여성</th><th scope="col">남성</th></tr></thead>
       <tbody>${entry.rx.map(row => `<tr><th scope="row">${escapeHTML(row.label)}</th><td>${escapeHTML(row.women)}</td>
         <td>${escapeHTML(row.men)}</td></tr>`).join('')}</tbody></table></section>` : '';
-  return `${summary}<p>${escapeHTML(entry.description)}</p>${workout}${rx}
-    <section class="benchmark-score"><h3>기록 방법</h3><p>${escapeHTML(entry.scoring)}</p></section>`;
+  return `<p>${escapeHTML(entry.description)}</p>${workout}${rx}
+    <section class="guide-callout"><h3>기록 방법</h3><p>${escapeHTML(entry.scoring)}</p></section>`;
 }
 
 function guideDetail(entry, showHistory, motion) {
+  const facts = guideFacts(entry).map(fact => `<div><dt>${escapeHTML(fact.label)}</dt><dd>${guideFactValue(fact)}${fact.note ? '<small>' + escapeHTML(fact.note) + '</small>' : ''}</dd></div>`).join('');
+  const summary = `<dl class="guide-summary">${facts}</dl>`;
+  let content;
+  if (entry.category === 'benchmark') {
+    content = benchmarkDetail(entry);
+  } else if (entry.category === 'movement') {
+    const cue = entry.cue ? `<section class="guide-callout"><h3>동작 포인트</h3><p>${escapeHTML(entry.cue)}</p></section>` : '';
+    content = `<p>${escapeHTML(entry.description)}</p>${cue}`;
+  } else {
+    const definition = [entry.description, entry.cue].filter(Boolean).join(' ');
+    content = `<p>${escapeHTML(definition)}</p><section class="guide-callout"><h3>와드 예시</h3><p>${escapeHTML(entry.example)}</p></section>`;
+  }
   const videoId = /^[A-Za-z0-9_-]{11}$/.test(entry.videoId || '') ? entry.videoId : '';
   const video = videoId ? `<details class="guide-demo"><summary>공식 시범 영상</summary>
     <div class="guide-player">${guideVideoButton(videoId)}</div>
@@ -134,10 +155,8 @@ function guideDetail(entry, showHistory, motion) {
   return `<header class="guide-dialog-header"><div><p class="guide-kind">${guideCategories[entry.category]}</p>
       <h2 id="guide-detail-title">${escapeHTML(entry.name)}</h2><p class="guide-english" lang="en">${escapeHTML(guideEnglishLabel(entry))}</p></div>
       <button class="guide-close" type="button" aria-label="가이드 닫기" autofocus>닫기</button></header>
-    <div class="guide-dialog-body">${entry.category === 'benchmark' ? benchmarkDetail(entry) : '<p>' + escapeHTML(entry.description) + '</p>'}
-      ${entry.cue ? '<p>' + escapeHTML(entry.cue) + '</p>' : ''}
+    <div class="guide-dialog-body">${summary}${content}
       ${motion ? movementPlayerView(motion) : ''}${video}
-      ${entry.example ? '<section><h3>예시</h3><p>' + escapeHTML(entry.example) + '</p></section>' : ''}
       ${history}
       ${entry.sourceUrl ? `<a class="guide-link" href="${escapeHTML(entry.sourceUrl)}" target="_blank" rel="noopener noreferrer">CrossFit 공식 자료 ↗</a>` : ''}
     </div>`;

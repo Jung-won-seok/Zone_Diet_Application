@@ -136,11 +136,12 @@ const movementDrawing = (() => {
   }
 
   function athlete(ctx, p, motion, regions, rings) {
-    const supportY = motion.equipment === 'box' && p.toe[0] >= motion.anchor[0]
+    const supportHeight = toe => motion.equipment === 'box' && toe[0] >= motion.anchor[0]
       ? motion.anchor[1] : 202;
+    const rearToe = p.rearToe || p.toe;
     ctx.save();
     ctx.translate(-3, 0);
-    leg(ctx, p.hip, p.rearKnee || p.knee, p.rearAnkle || p.ankle, p.rearToe || p.toe, true, supportY, p.rearKnee ? regions : []);
+    leg(ctx, p.hip, p.rearKnee || p.knee, p.rearAnkle || p.ankle, rearToe, true, supportHeight(rearToe), p.rearKnee ? regions : []);
     if (rings) {
       const offset = farRingOffset + 3;
       arm(ctx, p.shoulder, [p.elbow[0] + offset / 2, p.elbow[1]], [p.wrist[0] + offset, p.wrist[1]], true, []);
@@ -148,7 +149,7 @@ const movementDrawing = (() => {
       arm(ctx, p.shoulder, p.elbow, p.wrist, true, []);
     }
     ctx.restore();
-    leg(ctx, p.hip, p.knee, p.ankle, p.toe, false, supportY, regions);
+    leg(ctx, p.hip, p.knee, p.ankle, p.toe, false, supportHeight(p.toe), regions);
 
     const neck = along(p.shoulder, p.head, .68);
     segment(ctx, p.shoulder, neck, 4.7, 3.8, skin);

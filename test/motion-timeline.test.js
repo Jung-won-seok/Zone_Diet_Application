@@ -26,6 +26,60 @@ test('both muscle-ups reach straight-arm support above the grip and return to th
   }
 });
 
+test('each cycle joins with the same pose, equipment position and travel velocity', () => {
+  const dt = 0.0001;
+  for (const id of ids) {
+    const motion = browser.getMovementMotion(id);
+    const [before, end, start, after] = [motion.duration - dt, motion.duration, 0, dt]
+      .map(at => browser.sampleMovementPose(motion, at).pose);
+    for (const key of Object.keys(start)) {
+      const values = [before, end, start, after].map(pose => [pose[key]].flat());
+      // After two forward turns the rope has the same orientation in space.
+      const winding = key === 'ropeAngle' ? 4 * Math.PI : 0;
+      for (let axis = 0; axis < values[0].length; axis++) {
+        const [left, last, first, right] = values.map(point => point[axis]);
+        assert.ok(Math.abs(last - first - winding) < 1e-8, id + ' ' + key + ' position');
+        assert.ok(Math.abs((last - left) / dt - (right - first) / dt) < 1, id + ' ' + key + ' velocity');
+      }
+    }
+  }
+});
+
+test('box jump steps down one foot at a time without passing either foot through the box', () => {
+  const motion = browser.getMovementMotion('box-jump');
+  const top = motion.frames.find(frame => frame.label === '박스 위에서 일어서기' && frame.pose.toe[1] === motion.anchor[1]);
+  const [edge, height] = motion.anchor;
+  for (let t = top.at; t <= motion.duration; t += 1 / 120) {
+    const { pose } = browser.sampleMovementPose(motion, t);
+    for (const foot of [pose.toe, pose.rearToe]) {
+      assert.ok(foot[0] < edge || foot[1] <= height + 1e-6, 'foot goes through platform');
+    }
+    const nearOnBox = pose.toe[0] >= edge && pose.toe[1] === height;
+    const farOnFloor = pose.rearToe[1] === 202;
+    assert.ok(nearOnBox || farOnFloor || pose.toe[1] === 202, 'step down must stay supported');
+  }
+  // The transfer between legs is also a stable, individually scrubbable pose.
+  const transfer = motion.frames.find(frame => frame.label === '뒷발로 바닥 짚기').pose;
+  assert.equal(transfer.toe[1], height);
+  assert.equal(transfer.rearToe[1], 202);
+});
+
+test('the double-under rotates forward through two airborne passes per repetition', () => {
+  const motion = browser.getMovementMotion('double-under');
+  let previousAngle = motion.frames[0].pose.ropeAngle, passes = 0;
+  for (let i = 1; i <= 360; i++) {
+    const { pose } = browser.sampleMovementPose(motion, motion.duration * i / 360);
+    assert.ok(pose.ropeAngle > previousAngle);
+    const pass = (passes + 0.25) * 2 * Math.PI;
+    if (previousAngle < pass && pose.ropeAngle >= pass) {
+      assert.ok(pose.toe[1] < 198);
+      passes++;
+    }
+    previousAngle = pose.ropeAngle;
+  }
+  assert.equal(passes, 2);
+});
+
 test('every guide movement has a complete timeline that can be scrubbed in either direction', () => {
   assert.deepEqual(Array.from(ids).sort(), Array.from(vm.runInContext('Object.keys(movementMotions)', browser)).sort());
   assert.equal(browser.getMovementMotion('constructor'), null);

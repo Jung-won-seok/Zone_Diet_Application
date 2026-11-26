@@ -85,8 +85,11 @@ test('3D rotation, time and muscle emphasis each change the rendered pixels', ()
     return createHash('sha256').update(canvas.getContext().pixels).digest('hex');
   }
   const start = render(0, 0.48);
-  assert.notEqual(render(motion.duration, 0.48), start);
-  assert.notEqual(render(0, 0.48, false), start);
+  const overhead = motion.frames.find(frame => frame.label === '머리 위에서 팔 펴기');
+  const startGeometry = render(0, 0.48, false);
+  assert.notEqual(render(overhead.at, 0.48, false), startGeometry);
+  assert.equal(render(motion.duration, 0.48, false), startGeometry);
+  assert.notEqual(startGeometry, start);
   const views = [render(0, 0), render(0, Math.PI / 2), render(0, -Math.PI / 2), start];
   assert.equal(new Set(views).size, 4);
   assert.equal(render(0, 0.48), start);

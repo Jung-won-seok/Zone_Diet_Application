@@ -30,9 +30,10 @@
   min-width: 0;
   font-size: 14px;
   line-height: 1.4;
+  word-break: keep-all;
   overflow-wrap: anywhere;
 }
-.motion-toolbar button, .motion-phases button {
+.motion-toolbar button, .motion-rates button, .motion-phases button {
   min-height: 44px;
   border-radius: 8px;
   font-weight: 650;
@@ -53,16 +54,42 @@
   font-size: 12px;
   text-align: center;
 }
-.motion-rate {
-  min-width: 46px;
+.motion-rate, .motion-rates button {
   padding: 6px 9px;
   border: 1px solid #cbd6c8;
   color: var(--green);
   background: white;
   font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
-.motion-rate[data-slow="true"] {
-  border-color: var(--green);
+.motion-rate::after {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin: 0 1px 3px 7px;
+  border: solid currentColor;
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+.motion-rate[aria-expanded="true"]::after { transform: rotate(225deg); margin-bottom: 0; }
+.motion-rates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+.motion-rates[hidden] { display: none; }
+.motion-rates button {
+  flex: 1 0 44px;
+  padding-inline: 4px;
+}
+.motion-rates button[aria-pressed="true"] {
+  color: white;
+  background: var(--green);
+}
+.motion-rate[aria-expanded="true"] {
   background: #e7efdf;
 }
 .motion-timeline {

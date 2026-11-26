@@ -72,21 +72,15 @@
 .guide-group ul {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1px;
-  overflow: hidden;
+  gap: 8px;
   margin: 0;
   padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--line);
   list-style: none;
 }
 
-.guide-group li { background: #fff; }
-.guide-group li:last-child:nth-child(odd) { grid-column: 1 / -1; }
-
 .guide-row {
   display: flex;
+  min-width: 0;
   width: 100%;
   height: 100%;
   align-items: center;
@@ -95,28 +89,28 @@
   text-align: left;
   color: var(--ink);
   background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
   padding: 13px 18px;
 }
 
 .guide-row:hover { background: #f2f6ee; }
 .guide-row:focus-visible { outline-offset: -4px; }
+.guide-row > span:first-child {
+  align-self: start;
+  min-width: 0;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
 .guide-row strong, .guide-row small { display: block; overflow-wrap: anywhere; }
 .guide-row small, .guide-english { color: #58695e; }
 .guide-chevron { color: #647d6c; font-size: 24px; line-height: 1; }
 .guide-empty { padding: 18px; border-radius: 12px; background: #fff; }
 
-.guide-benchmarks ul {
-  gap: 8px;
-  overflow: visible;
-  border: 0;
-  background: transparent;
-}
-.guide-benchmarks li { border-radius: 12px; }
-.guide-benchmark-row { min-width: 0; border: 1px solid var(--line); border-radius: 12px; }
-.benchmark-name { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
-.benchmark-card-format, .benchmark-card-moves { display: block; font-size: 13px; }
-.benchmark-card-format { margin: 6px 0 2px; font-weight: 650; color: var(--green); }
-.benchmark-card-moves { color: #58695e; }
+.guide-card-name { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+.guide-card-facts, .guide-card-description { display: block; font-size: 13px; }
+.guide-card-facts { margin: 6px 0 2px; font-weight: 650; color: var(--green); }
+.guide-card-description { color: #58695e; line-height: 1.45; }
 
 .guide-dialog {
   width: min(540px, calc(100% - 24px));
@@ -148,9 +142,9 @@
 .guide-dialog-body h3 { margin-bottom: 5px; font-size: 15px; }
 .guide-dialog-body > p { margin: 0; }
 .guide-dialog [hidden] { display: none; }
-.benchmark-summary {
+.guide-summary {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   margin: 0;
   padding: 14px 16px;
@@ -158,10 +152,10 @@
   background: #edf3e8;
   color: var(--green);
 }
-.benchmark-summary > div + div { border-left: 1px solid #c9d5c2; padding-left: 16px; }
-.benchmark-summary dt, .benchmark-summary small { color: #4c6153; font-size: 12px; }
-.benchmark-summary dd { margin: 2px 0 0; font-size: 19px; line-height: 1.4; font-weight: 700; }
-.benchmark-summary small { display: block; margin-top: 1px; font-weight: 500; }
+.guide-summary > div + div { border-left: 1px solid #c9d5c2; padding-left: 16px; }
+.guide-summary dt, .guide-summary small { color: #4c6153; font-size: 12px; }
+.guide-summary dd { margin: 2px 0 0; font-size: 19px; line-height: 1.4; font-weight: 700; }
+.guide-summary small { display: block; margin-top: 1px; font-weight: 500; }
 .benchmark-rounds, .benchmark-rx {
   width: 100%;
   margin-top: 8px;
@@ -184,8 +178,8 @@
 .benchmark-steps li::marker { color: #5a6e5c; font-size: 13px; }
 .benchmark-steps li > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 .benchmark-steps strong { flex-shrink: 0; color: var(--green); font-variant-numeric: tabular-nums; }
-.benchmark-score { border-left: 3px solid #80a16e; padding-left: 12px; }
-.benchmark-score p { margin: 0; }
+.guide-callout { border-left: 3px solid #80a16e; padding-left: 12px; }
+.guide-callout p { margin: 0; }
 .guide-history { border-top: 1px solid var(--line); padding-top: 14px; }
 .guide-link { justify-self: start; color: var(--green); text-decoration: underline; text-underline-offset: 3px; }
 .guide-demo .guide-link { display: inline-block; margin-top: 7px; }

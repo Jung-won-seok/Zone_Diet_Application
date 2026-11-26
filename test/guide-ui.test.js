@@ -131,12 +131,35 @@ test('only benchmark detail for a member offers personal benchmark history', () 
   assert.doesNotMatch(ui.guideDetail(find('toes-to-bar'), true), /내 지난 기록/);
 });
 
+test('cards and details use the same layout with facts specific to each guide category', () => {
+  const ui = guideContext();
+  for (const entry of ui.guideEntries()) {
+    const card = ui.guideResultRow(entry);
+    const detail = ui.guideDetail(entry, false);
+    assert.match(card, /class="guide-card-name"/, entry.id);
+    assert.match(card, /class="guide-card-facts"/, entry.id);
+    assert.match(card, /class="guide-card-description"/, entry.id);
+    assert.match(detail, /<dl class="guide-summary">/, entry.id);
+    if (entry.category === 'benchmark') continue;
+    const values = entry.category === 'movement' ? [entry.family, entry.equipment] : [entry.topic, entry.notation];
+    for (const value of values) assert.ok(value && card.includes(value) && detail.includes(value), entry.id);
+    assert.ok(card.includes(entry.description) && detail.includes(entry.description), entry.id);
+    if (entry.cue) assert.ok(detail.includes(entry.cue), entry.id);
+    if (entry.example) assert.ok(detail.includes(entry.example), entry.id);
+  }
+  const find = id => ui.guideEntries().find(entry => entry.id === id);
+  assert.match(ui.guideResultRow(find('toes-to-bar')), /체조 · 철봉/);
+  assert.match(ui.guideResultRow(find('thruster')), /스쿼트·프레스 · 바벨/);
+  assert.match(ui.guideResultRow(find('amrap')), /운동 방식 · <span lang="en">10-min AMRAP/);
+  assert.match(ui.guideDetail(find('amrap'), false), /와드 예시/);
+});
+
 test('named workouts present the prescribed order, per-round reps, equipment and scoring', () => {
   const ui = guideContext();
   const catalog = ui.guideEntries().filter(entry => entry.category === 'benchmark');
   for (const entry of catalog) {
     const html = ui.guideDetail(entry, true);
-    assert.match(html, /class="benchmark-summary"/, entry.id);
+    assert.match(html, /class="guide-summary"/, entry.id);
     assert.ok(html.includes(entry.description) && html.includes(entry.scoring), entry.id);
     assert.ok(html.includes(entry.sourceUrl), entry.id);
     let previous = -1;
@@ -157,4 +180,6 @@ test('named workouts present the prescribed order, per-round reps, equipment and
   assert.match(detail('cindy'), /AMRAP[\s\S]*20분[\s\S]*5회[\s\S]*10회[\s\S]*15회/);
   assert.doesNotMatch(detail('cindy'), /class="benchmark-rx"/);
   assert.match(detail('karen'), /공 무게[\s\S]*14 lb[\s\S]*20 lb[\s\S]*표적 높이[\s\S]*9 ft[\s\S]*10 ft/);
+  assert.match(detail('chelsea'), /EMOM[\s\S]*30분[\s\S]*한 라운드의 운동 순서/);
+  assert.match(detail('murph'), /운동 구성[\s\S]*5단계/);
 });

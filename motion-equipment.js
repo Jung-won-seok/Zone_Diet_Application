@@ -26,6 +26,20 @@ const equipmentMotions = (() => {
   const rackArms = [62, -67];
   const ballTarget = [226, 33];
 
+  function stepDownKnee(hip, ankle) {
+    const dx = ankle[0] - hip[0], dy = ankle[1] - hip[1];
+    const span = Math.hypot(dx, dy);
+    const along = (31 ** 2 - 29 ** 2 + span ** 2) / (2 * span);
+    const bend = Math.sqrt(Math.max(0, 31 ** 2 - along ** 2));
+    return [hip[0] + (along * dx + bend * dy) / span, hip[1] + (along * dy - bend * dx) / span];
+  }
+
+  function stepDown(hip, ankle, rearAnkle, torso, arms) {
+    const toeAt = foot => [foot[0] + 14, foot[1] + 7];
+    return { ...upperBody(hip, torso, arms), ankle, toe: toeAt(ankle), knee: stepDownKnee(hip, ankle),
+      rearAnkle, rearToe: toeAt(rearAnkle), rearKnee: stepDownKnee(hip, rearAnkle) };
+  }
+
   function wallBall(legs, arms, flyingBall) {
     const pose = fromFeet([150, 195], legs, arms);
     // The palm touches the lower-left edge until release and again at the catch.
@@ -61,7 +75,7 @@ const equipmentMotions = (() => {
 
   return {
     'box-jump': {
-      duration: 2, equipment: 'box', anchor: [174, 153],
+      duration: 4.48, equipment: 'box', anchor: [174, 153],
       frames: [
         frame(0, '박스 앞에 서기', fromFeet([126, 195], standing, [85, 80])),
         frame(0.38, '팔을 뒤로 보내기', fromFeet([126, 195], [-68, -142, -57], [115, 145])),
@@ -75,31 +89,42 @@ const equipmentMotions = (() => {
         frame(1.38, '박스 위에 착지', fromFeet([200, 146], [-65, -154, -61], [25, -10])),
         frame(1.66, '박스 위에서 일어서기', fromFeet([200, 146], [-77, -120, -75], [53, 35])),
         frame(2, '박스 위에서 일어서기', fromFeet([200, 146], standing, [85, 80])),
-      ],
+        // Keep the near foot on the box until the far foot is on the floor.
+        frame(2.28, '한 발을 뒤로 내리기', stepDown([194, 91], [200, 146], [181, 138], -79, [67, 55])),
+        frame(2.52, '한 발을 뒤로 내리기', stepDown([187, 104], [200, 146], [158, 140], -72, [48, 34])),
+        frame(2.81, '한 발을 뒤로 내리기', stepDown([177, 118], [200, 146], [150, 166], -69, [40, 31])),
+        frame(3.10, '뒷발로 바닥 짚기', stepDown([164, 139], [200, 146], [150, 195], -65, [41, 31])),
+        frame(3.33, '나머지 발 내리기', stepDown([155, 137], [182, 137], [150, 195], -71, [53, 42])),
+        frame(3.53, '나머지 발 내리기', stepDown([146, 138], [157, 140], [150, 195], -75, [58, 49])),
+        frame(3.80, '나머지 발 내리기', stepDown([144, 137], [131, 166], [150, 195], -80, [68, 59])),
+        frame(4.05, '바닥에서 두 발 모으기', stepDown([138, 141], [126, 195], [150, 195], -82, [74, 68])),
+        frame(4.28, '바닥에서 두 발 모으기', stepDown([131, 139], [126, 195], [144, 190], -85, [80, 76])),
+        frame(4.48, '바닥에서 두 발 모으기', fromFeet([126, 195], standing, [85, 80])),
+      ].map(({ at, label, pose }) => frame(at, label, { rearAnkle: pose.ankle, rearKnee: pose.knee, rearToe: pose.toe, ...pose })),
     },
     'double-under': {
       duration: 1.46, equipment: 'rope',
-      // From takeoff (0 turns) to touchdown (2 turns), the rope tip passes
-      // below the shoes at exactly 1/4 and 1 1/4 turns in this side view.
+      // Two turns per complete cycle. Both passes beneath the shoes (at 1/4
+      // and 1 1/4 turns) occur in the air; the rope keeps turning at the seam.
       frames: [
-        frame(0, '줄 돌릴 준비', jumpRope(195, standing, 7, -0.25)),
-        frame(0.2, '무릎 굽히기', jumpRope(195, [-78, -112, -85], 7, -0.1)),
+        frame(0, '줄 돌릴 준비', jumpRope(195, standing, 7, -0.07)),
+        frame(0.2, '무릎 굽히기', jumpRope(195, [-78, -112, -85], 7, -0.035)),
         frame(0.32, '두 발로 도약', jumpRope(190, standing, 12, 0)),
         frame(0.42, '첫 번째 줄 통과', jumpRope(177, standing, 13, 0.25)),
         frame(0.52, '첫 번째 줄 통과', jumpRope(166, standing, 13, 0.5)),
         frame(0.72, '두 번째 회전', jumpRope(158, standing, 13, 1)),
         frame(0.82, '두 번째 줄 통과', jumpRope(160, standing, 13, 1.25)),
         frame(0.92, '두 번째 줄 통과', jumpRope(166, standing, 13, 1.5)),
-        frame(1.02, '착지 준비', jumpRope(177, standing, 13, 1.75)),
-        frame(1.12, '두 발로 착지', jumpRope(190, standing, 12, 2)),
-        frame(1.28, '두 발로 착지', jumpRope(195, [-78, -113, -85], 7, 2.07)),
-        frame(1.46, '다음 점프 준비', jumpRope(195, standing, 7, 2.12)),
+        frame(1.02, '착지 준비', jumpRope(177, standing, 13, 1.66)),
+        frame(1.12, '두 발로 착지', jumpRope(190, standing, 12, 1.78)),
+        frame(1.28, '두 발로 착지', jumpRope(195, [-78, -113, -85], 7, 1.87)),
+        frame(1.46, '다음 점프 준비', jumpRope(195, standing, 7, 1.93)),
       ],
     },
     'wall-ball': {
-      duration: 2.9, equipment: 'ball', anchor: ballTarget,
+      duration: 2.32, equipment: 'ball', anchor: ballTarget,
       frames: [
-        frame(0, '공을 가슴 앞에 받치기', wallBall(standing, rackArms)),
+        frame(0, '공을 가슴 앞에 받치기', wallBall([-81, -111, -81], rackArms)),
         frame(0.33, '스쿼트', wallBall([-74, -139, -78], rackArms)),
         frame(0.65, '스쿼트', wallBall([-63, 174, -69], rackArms)),
         frame(0.98, '일어서며 밀기', wallBall([-74, -129, -80], [50, -65])),
@@ -111,9 +136,8 @@ const equipmentMotions = (() => {
         frame(1.75, '공 내려오기', wallBall(standing, [-44, -62], [205, 40])),
         frame(1.92, '공 내려오기', wallBall(standing, [-35, -65], [188, 59])),
         frame(2.03, '공 받아내기', wallBall(standing, [-24, -66])),
-        frame(2.16, '공 받아내기', wallBall([-81, -111, -81], [20, -83])),
-        frame(2.32, '공 받아내기', wallBall([-76, -125, -76], rackArms)),
-        frame(2.9, '다음 스쿼트', wallBall([-63, 174, -69], rackArms)),
+        frame(2.16, '공 받아내기', wallBall([-86, -99, -85], [20, -83])),
+        frame(2.32, '다음 스쿼트', wallBall([-81, -111, -81], rackArms)),
       ],
     },
     'kettlebell-swing': {

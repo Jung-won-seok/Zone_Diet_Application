@@ -42,6 +42,23 @@ test('와드 본문은 긴 동작명, 복수형, 붙여 쓴 횟수와 조사를 
   assert.doesNotMatch(ui.guideInlineHTML('François 프랜차이즈 burpeeless XT2B T2B2 PushPresser AMRAPper'), /<button/);
 });
 
+test('새 네임드 와드는 영문과 한글 별칭으로 같은 항목을 찾고 와드 본문에서도 연결된다', () => {
+  const entries = require('../guide-benchmarks').map(entry => ({ ...entry, category: 'benchmark' }));
+  const ui = loadUI({ guideEntries: () => entries });
+  const names = [
+    ['angie', '엔지'], ['elizabeth', '엘리자벳'], ['mary', '메리'], ['kelly', '캘리'], ['eva', '에바'],
+    ['amanda', '아만다'], ['chelsea', '첼시'], ['dt', 'D.T.'], ['murph', '머프 와드'],
+  ];
+  for (const [id, spelling] of names) {
+    const entry = entries.find(item => item.id === id);
+    for (const query of [spelling, entry.english]) {
+      assert.ok(ui.guideSearchMatches(entry, query), query);
+      assert.match(ui.guideInlineHTML(query + ' 기록'), new RegExp('data-guide-entry="' + id + '"'), query);
+    }
+  }
+  assert.doesNotMatch(ui.guideInlineHTML('Maryland Murphy DTs'), /data-guide-entry/);
+});
+
 test('동작을 연결하더라도 코치가 입력한 HTML과 회원 메모는 실행되지 않는다', () => {
   const ui = loadUI();
   const day = { wod: { title: 'Fran', description: '<svg onload="evil()"> T2B & 버피' },

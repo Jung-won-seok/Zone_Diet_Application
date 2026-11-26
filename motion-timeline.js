@@ -40,7 +40,14 @@ function sampleBend(pose, first, last, u, root, joint, tip) {
   const along = Math.max(-upper, Math.min(upper, (upper * upper - lower * lower + distance * distance) / (2 * distance)));
   const height = side * Math.sqrt(Math.max(0, upper * upper - along * along));
   const dx = (to[0] - from[0]) / distance, dy = (to[1] - from[1]) / distance;
-  pose[joint] = [from[0] + dx * along - dy * height, from[1] + dy * along + dx * height];
+  // Very close to a keyframe the cubic joint path has the velocity of both
+  // adjacent segments. Ease in the length correction, which can otherwise
+  // snap a straight knee or elbow into a bend at the start of a new loop.
+  const edge = Math.min(1, u * 8, (1 - u) * 8);
+  const weight = edge * edge * (3 - 2 * edge);
+  const [x, y] = pose[joint];
+  pose[joint] = [x + weight * (from[0] + dx * along - dy * height - x),
+    y + weight * (from[1] + dy * along + dx * height - y)];
 }
 
 function sampleMovementPose(motion, seconds) {
@@ -51,14 +58,20 @@ function sampleMovementPose(motion, seconds) {
   const start = frames[i], end = frames[i + 1];
   if (!end || time === start.at) return { phaseIndex: i, pose: start.pose };
 
-  const prev = frames[i - 1], next = frames[i + 2];
+  // The end pose is the start pose one cycle later. Its neighbors on either
+  // side therefore contribute to the same tangent, even on the first play.
+  const firstSegment = i === 0, lastSegment = i === frames.length - 2;
+  const prev = firstSegment ? frames[frames.length - 2] : frames[i - 1];
+  const next = lastSegment ? frames[1] : frames[i + 2];
+  const prevSpan = start.at - prev.at + (firstSegment ? motion.duration : 0);
+  const nextSpan = next.at - end.at + (lastSegment ? motion.duration : 0);
   const span = end.at - start.at, u = (time - start.at) / span;
   const u2 = u * u, u3 = u2 * u;
   function between(a, b, p, n) {
     if (a === b) return a;
     const rate = (b - a) / span;
-    const left = prev ? motionTangent((a - p) / (start.at - prev.at), rate, start.at - prev.at, span) : rate;
-    const right = next ? motionTangent(rate, (n - b) / (next.at - end.at), span, next.at - end.at) : rate;
+    const left = motionTangent((a - p) / prevSpan, rate, prevSpan, span);
+    const right = motionTangent(rate, (n - b) / nextSpan, span, nextSpan);
     return (2 * u3 - 3 * u2 + 1) * a + (u3 - 2 * u2 + u) * span * left +
       (3 * u2 - 2 * u3) * b + (u3 - u2) * span * right;
   }
@@ -67,9 +80,12 @@ function sampleMovementPose(motion, seconds) {
   for (const [key, a] of Object.entries(start.pose)) {
     const b = end.pose[key];
     if (Array.isArray(a)) {
-      pose[key] = a.map((value, axis) => between(value, b[axis], prev?.pose[key][axis], next?.pose[key][axis]));
+      pose[key] = a.map((value, axis) => between(value, b[axis], prev.pose[key][axis], next.pose[key][axis]));
     } else {
-      pose[key] = between(a, b, prev?.pose[key], next?.pose[key]);
+      // The double-under is authored with increasing, unwrapped rope angles.
+      const winding = key === 'ropeAngle' ? frames[frames.length - 1].pose[key] - frames[0].pose[key] : 0;
+      pose[key] = between(a, b, prev.pose[key] - (firstSegment ? winding : 0),
+        next.pose[key] + (lastSegment ? winding : 0));
     }
   }
   sampleBend(pose, start.pose, end.pose, u, 'shoulder', 'elbow', 'wrist');

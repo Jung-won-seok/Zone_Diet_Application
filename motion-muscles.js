@@ -35,8 +35,15 @@ const movementStageMuscles = (() => {
     '엉덩이와 다리 펴기': jump,
     '다리와 엉덩이 펴기': jump,
   };
+  const returnToRack = {
+    '바벨을 어깨로 내리기': ['shoulders', 'triceps', 'core'], '어깨 앞에서 받기': frontRack,
+  };
+  const returnToFloor = {
+    '바벨을 허벅지로 내리기': ['shoulders', 'back', 'forearms'],
+    '무릎 아래로 내리기': hinge, '바벨을 바닥에 놓기': ['quads', 'glutes', 'hamstrings'],
+  };
   const clean = {
-    ...liftFromFloor,
+    ...liftFromFloor, ...returnToFloor,
     '바닥에서 준비하기': ['core', 'quads'],
     '팔꿈치를 바 아래로 돌리기': ['back', 'shoulders'],
     '얕게 앉아 어깨에 받기': ['quads', 'core'],
@@ -44,7 +51,7 @@ const movementStageMuscles = (() => {
     '어깨에 받치고 서기': squat,
   };
   const snatch = {
-    ...liftFromFloor,
+    ...liftFromFloor, ...returnToFloor,
     '넓게 잡고 준비하기': ['core', 'quads'],
     '바 아래로 팔 돌리기': ['back', 'shoulders'],
     '몸을 바 아래로 낮추기': ['back', 'shoulders'],
@@ -64,6 +71,7 @@ const movementStageMuscles = (() => {
       '선 자세로 마무리하기': overhead,
     },
     thruster: {
+      ...returnToRack,
       '어깨 앞에 바벨 받치기': frontRack, '바벨과 함께 내려가기': squat,
       '프런트 스쿼트 바닥 자세': squat, '다리로 바닥 밀기': squat,
       '일어서며 바벨 띄우기': ['quads', 'glutes', 'shoulders'],
@@ -76,11 +84,13 @@ const movementStageMuscles = (() => {
       '엉덩이를 접어 내리기': hinge, '바벨을 바닥에 놓기': ['quads', 'glutes', 'hamstrings'],
     },
     'push-press': {
+      ...returnToRack,
       '어깨 앞에서 준비하기': frontRack, '몸통을 세워 얕게 앉기': squat,
       '다리를 펴며 바벨 띄우기': squat, '선 채 바벨 밀어 올리기': press,
       '머리 위에서 팔 펴기': overhead,
     },
     'push-jerk': {
+      ...returnToRack,
       '어깨 앞에서 준비하기': frontRack, '무릎 살짝 굽히기': squat, '다리로 바벨 띄우기': jump,
       '바벨 아래로 들어가기': press, '무릎을 굽혀 머리 위로 받기': overheadSquat,
       '팔을 편 채 일어서기': overheadSquat,
@@ -89,7 +99,7 @@ const movementStageMuscles = (() => {
     'power-snatch': snatch,
     snatch,
     'clean-and-jerk': {
-      ...clean, '저크를 위해 얕게 앉기': squat, '바벨을 위로 띄우기': jump,
+      ...clean, ...returnToRack, '저크를 위해 얕게 앉기': squat, '바벨을 위로 띄우기': jump,
       '앞뒤로 발을 벌려 받기': overheadSquat, '앞발을 중앙으로 옮기기': overheadSquat,
       '양발을 모아 서기': overhead,
     },
@@ -143,7 +153,8 @@ const movementStageMuscles = (() => {
     'box-jump': {
       '박스 앞에 서기': ['core', 'quads'], '팔을 뒤로 보내기': squat,
       '두 발로 도약': jump, '발을 박스 위로': raiseLegs, '박스 위에 착지': jump,
-      '박스 위에서 일어서기': squat,
+      '박스 위에서 일어서기': squat, '한 발을 뒤로 내리기': squat, '뒷발로 바닥 짚기': squat,
+      '나머지 발 내리기': squat, '바닥에서 두 발 모으기': ['glutes', 'core'],
     },
     'double-under': {
       '줄 돌릴 준비': ['forearms'], '무릎 굽히기': ['quads', 'calves'], '두 발로 도약': ['calves', 'quads'],

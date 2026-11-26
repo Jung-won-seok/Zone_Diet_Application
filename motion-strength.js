@@ -59,6 +59,29 @@ const strengthMotions = (() => {
     return { equipment: 'barbell', duration: frames[frames.length - 1].at, frames };
   }
 
+  function lowerToRack(at) {
+    return [
+      frame(at + 0.36, '바벨을 어깨로 내리기', pressAtForehead),
+      frame(at + 0.84, '어깨 앞에서 받기', rack(standing)),
+    ];
+  }
+
+  function lowerToFloor(at, wide = false) {
+    return [
+      frame(at + 0.30, '바벨을 허벅지로 내리기', hold(dip, [159, 113], [171, 106])),
+      frame(at + 0.65, '바벨을 허벅지로 내리기', pull(powerPosition, 156, wide ? 126 : 140)),
+      frame(at + 1.12, '무릎 아래로 내리기', pull(atKnee, 156, wide ? 151 : 162)),
+      frame(at + 1.68, '바벨을 바닥에 놓기', wide ? snatchFloor : cleanFloor),
+    ];
+  }
+
+  function lowerSnatch(at) {
+    return [
+      frame(at + 0.38, '바벨을 허벅지로 내리기', hold(pressing, [170, 69], [162, 56])),
+      ...lowerToFloor(at + 0.40, true),
+    ];
+  }
+
   // Show both legs throughout this lift so the rear foot can transition continuously into the split.
   function splitStance(pose, rearKnee, rearAnkle, rearToe) {
     const behind = ([x, y]) => [x - 4, y];
@@ -91,6 +114,7 @@ const strengthMotions = (() => {
       frame(2.7, '일어서며 바벨 띄우기', rack(standing)),
       frame(3.1, '얼굴 앞으로 바벨 밀기', pressAtForehead),
       frame(3.6, '머리 위에서 팔 펴기', overhead(standing)),
+      ...lowerToRack(3.6),
     ]),
     deadlift: lift([
       frame(0, '바닥의 바벨 잡기', floorPull),
@@ -106,6 +130,7 @@ const strengthMotions = (() => {
       frame(1.1, '다리를 펴며 바벨 띄우기', rack(standing)),
       frame(1.5, '선 채 바벨 밀어 올리기', pressAtForehead),
       frame(2.1, '머리 위에서 팔 펴기', overhead(standing)),
+      ...lowerToRack(2.1),
     ]),
     'push-jerk': lift([
       frame(0, '어깨 앞에서 준비하기', rack(standing)),
@@ -114,6 +139,7 @@ const strengthMotions = (() => {
       frame(1.3, '바벨 아래로 들어가기', hold(dip, [169, 79], [159, 62])),
       frame(1.6, '무릎을 굽혀 머리 위로 받기', overhead(halfSquat)),
       frame(2.5, '팔을 편 채 일어서기', overhead(standing)),
+      ...lowerToRack(2.5),
     ]),
     'power-clean': lift([
       frame(0, '바닥에서 준비하기', cleanFloor),
@@ -122,6 +148,7 @@ const strengthMotions = (() => {
       frame(1.7, '팔꿈치를 바 아래로 돌리기', cleanTurnover),
       frame(2.0, '얕게 앉아 어깨에 받기', rack(halfSquat)),
       frame(2.9, '어깨에 받치고 서기', rack(standing)),
+      ...lowerToFloor(2.9),
     ]),
     'power-snatch': lift([
       frame(0, '넓게 잡고 준비하기', snatchFloor),
@@ -130,6 +157,7 @@ const strengthMotions = (() => {
       frame(1.7, '바 아래로 팔 돌리기', snatchTurnover),
       frame(2.0, '얕게 앉아 머리 위로 받기', overhead(halfSquat, true)),
       frame(2.9, '머리 위에 지지하고 서기', overhead(standing, true)),
+      ...lowerSnatch(2.9),
     ]),
     snatch: lift([
       frame(0, '넓게 잡고 준비하기', snatchFloor),
@@ -139,6 +167,7 @@ const strengthMotions = (() => {
       frame(2.1, '깊이 앉아 머리 위로 받기', overhead(deepSquat, true)),
       frame(2.9, '팔을 편 채 일어나기', overhead(halfSquat, true)),
       frame(3.6, '머리 위에 지지하고 서기', overhead(standing, true)),
+      ...lowerSnatch(3.6),
     ]),
     'clean-and-jerk': lift([
       frame(0, '바닥에서 준비하기', splitStance(cleanFloor)),
@@ -152,6 +181,7 @@ const strengthMotions = (() => {
       frame(4.5, '앞뒤로 발을 벌려 받기', splitStance(overhead(split), [124, 172], [99, 193], [109, 202])),
       frame(5.1, '앞발을 중앙으로 옮기기', splitStance(overhead(splitStep), [122, 160], [106, 191], [117, 202])),
       frame(5.8, '양발을 모아 서기', splitStance(overhead(standing))),
+      ...[...lowerToRack(5.8), ...lowerToFloor(6.64)].map(f => frame(f.at, f.label, splitStance(f.pose))),
     ]),
   };
 })();

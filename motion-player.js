@@ -1,5 +1,11 @@
+const movementPlaybackRates = [0.5, 0.75, 1, 1.25, 1.5];
+
 function movementPlayerView(motion) {
   const { frames, duration } = motion;
+  const ratesId = 'motion-rates-' + escapeHTML(motion.id);
+  const rateButtons = movementPlaybackRates.map(speed =>
+    `<button type="button" data-motion-speed="${speed}" aria-label="${speed}배" aria-pressed="${speed === 1}">${speed}×</button>`
+  ).join('');
   const phaseButtons = frames.map((frame, index) => {
     if (index && frame.label === frames[index - 1].label) return '';
     return `<button type="button" data-motion-phase="${index}"${index === 0 ? ' aria-current="step"' : ''}>${escapeHTML(frame.label)}</button>`;
@@ -19,8 +25,9 @@ function movementPlayerView(motion) {
         <div class="motion-toolbar">
           <button class="motion-play" type="button" data-motion-play><span data-motion-icon aria-hidden="true">▶</span><span data-motion-play-label>재생</span></button>
           <strong data-motion-label>${escapeHTML(frames[0].label)}</strong>
-          <button class="motion-rate" type="button" data-motion-rate aria-label="재생 속도 1배, 0.5배로 변경">1×</button>
+          <button class="motion-rate" type="button" data-motion-rate aria-label="재생 속도 1배" aria-expanded="false" aria-controls="${ratesId}">배속 1×</button>
         </div>
+        <div id="${ratesId}" class="motion-rates" data-motion-rates role="group" aria-label="재생 속도 선택" hidden>${rateButtons}</div>
         <label class="motion-timeline">
           <span>재생 위치</span>
           <span class="motion-clock" aria-hidden="true"><b data-motion-current>0.00</b> / ${duration.toFixed(2)}초</span>
@@ -39,6 +46,8 @@ function mountMovementPlayer(root, motion) {
   const playLabel = root.querySelector('[data-motion-play-label]');
   const icon = root.querySelector('[data-motion-icon]');
   const rate = root.querySelector('[data-motion-rate]');
+  const rates = root.querySelector('[data-motion-rates]');
+  const rateButtons = root.querySelectorAll('[data-motion-speed]');
   const range = root.querySelector('[data-motion-time]');
   const clock = root.querySelector('[data-motion-current]');
   const label = root.querySelector('[data-motion-label]');
@@ -148,13 +157,27 @@ function mountMovementPlayer(root, motion) {
   for (const step of steps) {
     step.addEventListener('click', () => seek(motion.frames[Number(step.dataset.motionPhase)].at), options);
   }
-  rate.addEventListener('click', () => {
-    if (playing) advance(performance.now());
-    speed = speed === 1 ? 0.5 : 1;
-    rate.textContent = speed + '×';
-    rate.dataset.slow = String(speed === 0.5);
-    rate.setAttribute('aria-label', `재생 속도 ${speed}배, ${speed === 1 ? 0.5 : 1}배로 변경`);
-    render();
+  function showRates(open) {
+    rates.hidden = !open;
+    rate.setAttribute('aria-expanded', String(open));
+    if (!open) rate.focus({ preventScroll: true });
+  }
+  rate.addEventListener('click', () => showRates(rates.hidden), options);
+  for (const button of rateButtons) {
+    button.addEventListener('click', () => {
+      if (playing) advance(performance.now());
+      speed = Number(button.dataset.motionSpeed);
+      rate.textContent = `배속 ${speed}×`;
+      rate.setAttribute('aria-label', `재생 속도 ${speed}배`);
+      for (const choice of rateButtons) choice.setAttribute('aria-pressed', String(choice === button));
+      showRates(false);
+      render();
+    }, options);
+  }
+  root.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || rates.hidden) return;
+    event.preventDefault();
+    showRates(false);
   }, options);
   document.addEventListener('visibilitychange', () => {
     if (!playing) return;

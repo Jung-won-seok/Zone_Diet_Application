@@ -18,12 +18,19 @@ class Control extends EventTarget {
   textContent = '';
   setAttribute(key, value) { this.attrs[key] = value; }
   removeAttribute(key) { delete this.attrs[key]; }
-  fire(type) { this.dispatchEvent(new Event(type)); }
+  focus() { this.focused = true; }
+  fire(type, props) { return this.dispatchEvent(Object.assign(new Event(type, { cancelable: true }), props)); }
 }
 
 function fixture() {
-  const controls = new Map(['canvas', 'play', 'play-label', 'icon', 'rate', 'time', 'current', 'label', 'muscles', 'camera']
+  const controls = new Map(['canvas', 'play', 'play-label', 'icon', 'rate', 'rates', 'time', 'current', 'label', 'muscles', 'camera']
     .map(key => [key, new Control()]));
+  controls.get('rates').hidden = true;
+  const speeds = [0.5, 0.75, 1, 1.25, 1.5].map(speed => {
+    const button = new Control();
+    button.dataset.motionSpeed = String(speed);
+    return button;
+  });
   const steps = [0, 2, 3].map(index => {
     const button = new Control();
     button.dataset.motionPhase = String(index);
@@ -42,10 +49,12 @@ function fixture() {
   const zoomScale = new Control();
   controls.get('camera').querySelector = selector => selector === '[data-camera-scale]' ? zoomScale : null;
   controls.get('camera').querySelectorAll = selector => selector === '[data-camera-view]' ? presets : [];
-  const root = {
+  const root = Object.assign(new Control(), {
     querySelector(selector) { return controls.get(selector.replace(/^\[data-motion-(.+)\]$/, '$1')); },
-    querySelectorAll(selector) { return selector === '[data-motion-mode]' ? modes : steps; }
-  };
+    querySelectorAll(selector) {
+      return { '[data-motion-mode]': modes, '[data-motion-phase]': steps, '[data-motion-speed]': speeds }[selector];
+    }
+  });
   const document = new Control();
   let now = 0, next = 0, disconnected = false;
   const frames = new Map(), draws = [], draws3D = [], muscleUpdates = [];
@@ -89,7 +98,7 @@ function fixture() {
   }
   const player = ui.mountMovementPlayer(root, motion);
   return {
-    player, ui, document, frames, steps, controls, draws, draws3D, muscleUpdates, modes, presets, disconnected: () => disconnected,
+    player, ui, root, document, frames, steps, controls, draws, draws3D, muscleUpdates, modes, presets, speeds, disconnected: () => disconnected,
     el: key => controls.get(key),
     elapse(ms) { now += ms; },
     tick(ms) {
@@ -150,7 +159,8 @@ test('반속에서도 남은 시간을 다음 반복에 넘기고 일시정지�
   f.el('play').fire('click');
   f.tick(500);
   f.el('rate').fire('click');
-  assert.equal(f.el('rate').textContent, '0.5×');
+  f.speeds[0].fire('click');
+  assert.equal(f.el('rate').textContent, '배속 0.5×');
   f.tick(1000);
   assert.equal(f.draws.at(-1), 1);
   f.tick(10500);
@@ -174,6 +184,45 @@ test('반속에서도 남은 시간을 다음 반복에 넘기고 일시정지�
   f.tick(4000);
   assert.equal(f.draws.at(-1), 0);
   assert.equal(f.frames.size, 1);
+});
+
+test('다섯 가지 배속은 선택 시점부터 적용되고 배속을 열거나 Esc로 닫아도 재생은 이어진다', () => {
+  const f = fixture();
+  const rates = [0.5, 0.75, 1, 1.25, 1.5];
+  const html = f.ui.movementPlayerView(motion);
+  assert.deepEqual([...html.matchAll(/data-motion-speed="([^"]+)"/g)].map(match => Number(match[1])), rates);
+  assert.match(html, /data-motion-speed="1"[^>]+aria-pressed="true"/);
+  assert.match(html, /aria-controls="motion-rates-test-lift"/);
+  assert.match(html, /id="motion-rates-test-lift"[^>]+hidden/);
+  f.el('rate').fire('click');
+  assert.equal(f.el('rate').attrs['aria-expanded'], 'true');
+  assert.equal(f.root.fire('keydown', { key: 'Escape' }), false);
+  assert.equal(f.el('rate').attrs['aria-expanded'], 'false');
+  assert.ok(f.el('rate').focused);
+  assert.equal(f.frames.size, 0);
+  f.el('play').fire('click');
+  let speed = 1, time = 0;
+  for (const [i, nextSpeed] of rates.entries()) {
+    f.el('rate').fire('click');
+    assert.equal(f.el('rates').hidden, false);
+    f.elapse(120);
+    f.speeds[i].fire('click');
+    time = (time + 0.12 * speed) % motion.duration;
+    assert.equal(f.el('current').textContent, time.toFixed(2));
+    assert.equal(f.el('rate').attrs['aria-label'], `재생 속도 ${nextSpeed}배`);
+    assert.equal(f.el('rates').hidden, true);
+    assert.deepEqual(f.speeds.filter(button => button.attrs['aria-pressed'] === 'true'), [f.speeds[i]]);
+    assert.equal(f.frames.size, 1);
+    f.tick(400);
+    speed = nextSpeed;
+    time = (time + 0.4 * speed) % motion.duration;
+    assert.equal(f.el('current').textContent, time.toFixed(2));
+  }
+  f.player.pause();
+  f.el('rate').fire('click');
+  f.speeds[1].fire('click');
+  assert.equal(f.el('current').textContent, time.toFixed(2));
+  assert.equal(f.frames.size, 0);
 });
 
 test('탭이 숨겨진 동안은 그리지 않고 복귀하면 반복 재생을 이어 간다', () => {
