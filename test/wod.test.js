@@ -98,3 +98,60 @@ test('ordinary box members can log a WOD and privately compare benchmark results
   assert.deepEqual(lastPage.items.map(row => row.date), ['2026-11-02', '2026-11-01']);
   assert.equal(lastPage.nextBefore, null);
 });
+
+test('named WOD guide pages only the signed-in member’s matching results, including legacy templates and scaling', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-26T08:00:00Z') });
+  const password = 'test-password-123';
+  let store = seedStore({ admin: password }, { demoMembers: false });
+  store.users.push(makeUser('athlete', 'athlete', 'athlete', password), makeUser('other', 'other', 'other', password));
+  store.wods = {};
+  store.wodResults = { athlete: {}, other: {} };
+  const fixture = (day, title, benchmarkId) => {
+    const date = '2026-11-' + String(day).padStart(2, '0');
+    store.wods[date] = { benchmarkId, title, description: '이번 주 목표는 Fran 연습', revision: 1 };
+    store.wodResults.athlete[date] = { benchmarkId, revision: 1, time: '6:30', scaling: '밴드 풀업' };
+  };
+  for (let day = 1; day <= 12; day++) fixture(day, 'Fran', 'fran-template');
+  fixture(1, 'Fran (Rx’d)', 'straight-fran-1');
+  fixture(2, "Fran Rx'd", 'straight-fran-2');
+  fixture(3, 'Fran (RxD)', 'straight-fran-3');
+  fixture(13, '프란 (Fran)', 'bilingual-template');
+  fixture(14, 'FRAN (Scaled)', 'scaled-template');
+  fixture(15, '레벤 테스트', 'fran-template');
+  fixture(16, 'Double Fran', 'fran-template');
+  fixture(17, 'Fran + Cindy', 'fran-template');
+  fixture(18, 'François', 'unrelated');
+  fixture(19, '기술 연습', 'custom-template');
+  fixture(20, 'Fran', 'ambiguous-template');
+  fixture(21, 'Cindy', 'ambiguous-template');
+  fixture(22, '금요일 수업', 'ambiguous-template');
+  fixture(23, '팀프란', 'fran-template');
+  fixture(24, 'Fran (Rx’d Team)', 'fran-template');
+  store.wodResults.other['2026-11-13'] = { benchmarkId: 'bilingual-template', revision: 1, time: '4:00', scaling: 'Rx' };
+  const app = createServer({ initialStore: store, persistStore: next => { store = next; } });
+  const athlete = client(app), other = client(app), coach = client(app);
+  for (const [request, username] of [[athlete, 'athlete'], [other, 'other'], [coach, 'admin']]) {
+    await request('/api/login', 'POST', { username, password });
+  }
+  const history = '/api/wod/history?guide=fran';
+  const page = (await athlete(history + '&memberId=other')).data;
+  assert.equal(page.items.length, 10);
+  assert.deepEqual(page.items.slice(0, 4).map(row => row.date), ['2026-11-20', '2026-11-15', '2026-11-14', '2026-11-13']);
+  assert.ok(page.items.every(row => row.scaling === '밴드 풀업'));
+  const secondPage = (await athlete(history + '&before=' + page.nextBefore)).data;
+  assert.deepEqual(secondPage.items.map(row => row.date), [6, 5, 4, 3, 2, 1].map(day => '2026-11-0' + day));
+  assert.equal(secondPage.nextBefore, null);
+  assert.deepEqual((await other(history)).data.items.map(row => row.scaling), ['Rx']);
+  assert.equal((await coach(history)).status, 403);
+  assert.equal((await athlete('/api/wod/history?guide=double-fran')).status, 422);
+  assert.deepEqual((await athlete('/api/wod/history?guide=cindy')).data.items.map(row => row.date), ['2026-11-21']);
+
+  // A coach can correct the only title of a template without orphaning its
+  // existing guide association, even if the stored data predates the guide.
+  const edit = await coach('/api/wod?date=2026-11-13', 'PUT', {
+    title: '박스 타임트라이얼', description: '21-15-9', benchmarkId: 'bilingual-template', revision: 1
+  });
+  assert.equal(edit.status, 200);
+  assert.equal(edit.data.wod.guideId, 'fran');
+  assert.equal((await other(history)).data.items[0].title, '박스 타임트라이얼');
+});

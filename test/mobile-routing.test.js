@@ -69,6 +69,7 @@ function fixture(hash = '#record/2026-11-10', {isAdmin = false, zondaParticipant
     boxMembersIsDirty:()=>flags.boxMember, reservationsView:()=>'<div>수업 예약</div>', boxMembersView:()=>'<div>박스 회원 관리</div>',
     showAccountRecovery(){return false;}, mountWodPreview(){},
     wodView:()=>'<div>오늘의 와드</div>', wodIsDirty:()=>flags.wod,
+    guideView:()=>'<div>크로스핏 가이드</div>', mountGuide(){navState.guideMounted=true;}, cleanupGuide(){},
     mountWod(date){navState.wodDate=date;navState.wodMounts=(navState.wodMounts||0)+1;},
     restoreWodDate(){navState.restoredWodDate=navState.wodDate;}, cleanupWod(){flags.wod=false;},
     cleanupBookingNotifications(){}, mountBookingNotifications(){}, disableBookingPushOnLogout(){},
@@ -142,7 +143,7 @@ test('accepted personal discard switches page once and clears old-form dirty sta
 test('booking is the default for box members and Zonda keeps previous participant bookmarks', async () => {
   const f = fixture('');
   assert.equal(f.active, 'reservations');
-  assert.deepEqual(f.pages, ['reservations', 'wod', 'zonda']);
+  assert.deepEqual(f.pages, ['reservations', 'wod', 'guide', 'zonda']);
   await f.navigate('#reservations/2027-01-04');
   assert.equal(f.navState.bookingDate, '2027-01-04');
   await f.navigate('#zonda');
@@ -165,6 +166,10 @@ test('box-only members can open Zonda information and gain access after enrollme
   const f = fixture('#members', {zondaParticipant: false});
   assert.equal(f.active, 'reservations');
   assert.ok(!f.pages.includes('members'));
+  await f.navigate('#guide');
+  assert.equal(f.active, 'guide');
+  assert.equal(f.navState.guideMounted, true);
+  assert.equal(f.body.classList.contains('in-box'), true);
   await f.navigate('#zonda');
   assert.equal(f.active, 'zonda');
   assert.match(f.markup, /href="#reservations"/);
@@ -180,7 +185,7 @@ test('box-only members can open Zonda information and gain access after enrollme
 test('administrators manage the box and Zonda separately; unapproved applicants only see onboarding', async () => {
   const f = fixture('', {isAdmin: true, zondaParticipant: false});
   assert.equal(f.active, 'reservations');
-  assert.deepEqual(f.pages, ['reservations', 'wod', 'members', 'zonda']);
+  assert.deepEqual(f.pages, ['reservations', 'wod', 'guide', 'members', 'zonda']);
   await f.navigate('#members');
   assert.equal(f.active, 'members');
   assert.match(f.markup, /박스 회원 관리/);
@@ -196,6 +201,9 @@ test('administrators manage the box and Zonda separately; unapproved applicants 
   const pending = fixture('#reservations', {zondaParticipant: false, pendingApproval: true});
   assert.deepEqual(pending.pages, ['connect']);
   assert.equal(pending.active, 'connect');
+  await pending.navigate('#guide');
+  assert.equal(pending.active, 'connect');
+  assert.equal(pending.navState.guideMounted, undefined);
 });
 
 test('members outside Zonda can open a WOD and preserve an unsaved result when declining a date change', async () => {

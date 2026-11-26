@@ -5,6 +5,7 @@ module.exports = [
   'admin.js', 'meals.js', 'meal-summary.js', 'cafe-draft.js', 'naver-ui.js',
   'reservations.js', 'member-management.js',
   'schedule-ui.js', 'schedule-ui.css', 'memberships.css',
+  'guide-movements.js', 'guide-benchmarks.js', 'guide-terms.js', 'guide-match.js', 'guide.js', 'guide.css',
   'recovery.js', 'wod.js', 'wod.css', 'notifications.js', 'notifications.css', 'push-worker.js',
   'leben.webmanifest', 'leben-192.png', 'leben-512.png',
 ];

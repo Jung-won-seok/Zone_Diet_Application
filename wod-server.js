@@ -1,9 +1,58 @@
 const { randomUUID } = require('node:crypto');
+const guideBenchmarks = require('./guide-benchmarks');
 
 const seoulDate = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit'
 });
 const HISTORY_PAGE_SIZE = 10;
+const guideScalingLabels = new Set(['rx', "rx'd", 'rx’d', 'rxd', 'scaled', '스케일드', '스케일링']);
+const guideIds = new Set(guideBenchmarks.map(entry => entry.id));
+const guideNames = new Map();
+for (const entry of guideBenchmarks) {
+  for (const name of [entry.name, entry.english, ...entry.aliases]) {
+    guideNames.set(normalizeName(name), entry.id);
+  }
+}
+
+function normalizeName(name) {
+  return name.normalize('NFKC').trim().toLowerCase().replace(/\s+/gu, ' ');
+}
+
+// Only whole titles identify a benchmark. A workout like "Double Fran" must
+// stay out of Fran history even when a coach used Fran as the starting template.
+function titleGuide(title) {
+  const name = normalizeName(title).replace(/\s*\(\s*([^()]+?)\s*\)$|\s+(\S+)$/u,
+    (suffix, parenthesized, plain) => guideScalingLabels.has(parenthesized || plain) ? '' : suffix);
+  if (guideNames.has(name)) return guideNames.get(name);
+  const pair = /^([^()]+?)\s*\(([^()]+)\)$/u.exec(name) || /^(.+?)\s*[-/·|]\s*(.+)$/u.exec(name);
+  if (pair) {
+    const first = guideNames.get(pair[1].trim());
+    if (first && first === guideNames.get(pair[2].trim())) return first;
+  }
+  // Null explicitly excludes a named variation. An unrelated label may be a
+  // coach's local name for a known, deliberately reused benchmark UUID.
+  for (const alias of guideNames.keys()) {
+    if (name.includes(alias)) return null;
+  }
+  return undefined;
+}
+
+function savedGuide(wod) {
+  const named = titleGuide(wod.title);
+  if (named !== undefined) return named;
+  return guideIds.has(wod.guideId) ? wod.guideId : undefined;
+}
+
+function guideByTemplate(wods) {
+  const byTemplate = new Map();
+  for (const wod of Object.values(wods || {})) {
+    const id = savedGuide(wod);
+    if (!wod.benchmarkId || !id) continue;
+    if (!byTemplate.has(wod.benchmarkId)) byTemplate.set(wod.benchmarkId, id);
+    else if (byTemplate.get(wod.benchmarkId) !== id) byTemplate.set(wod.benchmarkId, null);
+  }
+  return byTemplate;
+}
 
 function createWodService({ getStore, commit, ApiError, isValidDate, now = Date.now }) {
   function requireDate(date) {
@@ -53,9 +102,16 @@ function createWodService({ getStore, commit, ApiError, isValidDate, now = Date.
     return view;
   }
 
-  function history(store, user, before) {
+  function history(store, user, before, guide) {
     const records = store.wodResults?.[user.id] || {};
-    const dates = Object.keys(records).filter(date => (!before || date < before) && store.wods?.[date]).sort().reverse();
+    const templateGuides = guide ? guideByTemplate(store.wods) : null;
+    const dates = Object.keys(records).filter(date => {
+      const wod = store.wods?.[date];
+      if (!wod || (before && date >= before)) return false;
+      if (!guide) return true;
+      const saved = savedGuide(wod);
+      return (saved === undefined ? templateGuides.get(wod.benchmarkId) : saved) === guide;
+    }).sort().reverse();
     const items = dates.slice(0, HISTORY_PAGE_SIZE).map(date => resultItem(store, records, date));
     return { items, nextBefore: dates.length > items.length ? items.at(-1).date : null };
   }
@@ -76,6 +132,11 @@ function createWodService({ getStore, commit, ApiError, isValidDate, now = Date.
       throw new ApiError(409, '회원 기록이 있는 날짜는 다른 와드로 바꿀 수 없습니다. 기존 와드의 이름이나 구성은 수정할 수 있습니다.');
     }
     const wod = { benchmarkId, title, description, revision: (current?.revision || 0) + 1 };
+    let guideId = titleGuide(title);
+    if (guideId === undefined && requestedId) {
+      guideId = guideByTemplate(store.wods).get(requestedId);
+    }
+    if (guideId) wod.guideId = guideId;
     return { ...store, wods: { ...store.wods, [date]: wod } };
   }
 
@@ -118,7 +179,9 @@ function createWodService({ getStore, commit, ApiError, isValidDate, now = Date.
       if (user.isAdmin) throw new ApiError(403, '회원 계정에서 내 기록을 확인해주세요.');
       const before = url.searchParams.get('before');
       if (before !== null) requireDate(before);
-      send(res, 200, history(getStore(), user, before));
+      const guide = url.searchParams.get('guide');
+      if (guide !== null && !guideIds.has(guide)) throw new ApiError(422, '가이드에 등록된 와드를 선택해주세요.');
+      send(res, 200, history(getStore(), user, before, guide));
       return true;
     }
     const dateValue = url.searchParams.get('date');

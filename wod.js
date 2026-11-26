@@ -20,12 +20,25 @@ function wodUrl(date) {
   return '/api/wod' + (validBookingDate(date) ? '?date=' + encodeURIComponent(date) : '');
 }
 
+function wodGuideClick(event) {
+  const trigger = event.target.closest('[data-guide-entry]');
+  if (trigger) openGuideEntry(trigger.dataset.guideEntry, trigger);
+}
+
+function wodPreviewExcerpt(text) {
+  const lines = text.split(/\r?\n/);
+  const preview = [...lines.slice(0, 2).join('\n')];
+  if (lines.length <= 2 && preview.length <= 150) return text;
+  return preview.slice(0, 150).join('').trimEnd() + '…';
+}
+
 async function mountWodPreview(date) {
   const schedule = document.querySelector('#box-schedule');
   if (!schedule) return;
   const preview = document.createElement('section');
   preview.className = 'wod-preview';
   preview.setAttribute('aria-label', '선택한 날짜의 와드');
+  preview.addEventListener('click', wodGuideClick);
   schedule.before(preview);
   const link = document.createElement('a');
   link.href = validBookingDate(date) ? '#wod/' + date : '#wod';
@@ -38,12 +51,13 @@ async function mountWodPreview(date) {
     const heading = document.createElement('h2');
     heading.textContent = day.date === day.today ? '오늘의 와드' : dateLabel(day.date) + ' 와드';
     const title = document.createElement('p');
-    title.textContent = day.wod?.title || '아직 등록된 와드가 없습니다.';
+    if (day.wod) title.innerHTML = guideInlineHTML(day.wod.title);
+    else title.textContent = '아직 등록된 와드가 없습니다.';
     info.append(heading, title);
     if (day.wod) {
       const description = document.createElement('p');
       description.className = 'wod-preview-plan';
-      description.textContent = day.wod.description;
+      description.innerHTML = guideInlineHTML(wodPreviewExcerpt(day.wod.description));
       info.append(description);
     }
     if (day.previous) {
@@ -100,7 +114,7 @@ function wodResultForm(result = {}) {
 function wodMemberView(day) {
   const wod = day.wod;
   let html = wod
-    ? `<section class="card wod-sheet"><h2>${escapeHTML(wod.title)}</h2><p>${escapeHTML(wod.description)}</p></section>`
+    ? `<section class="card wod-sheet"><h2>${guideInlineHTML(wod.title)}</h2><p>${guideInlineHTML(wod.description)}</p></section>`
     : '<p class="card">이 날짜에는 등록된 와드가 없습니다.</p>';
   if (wod) {
     const previous = day.previous;
@@ -117,7 +131,7 @@ function wodHistoryView() {
     <ul></ul><p role="status"></p><button class="button secondary" data-history-more type="button" hidden>더 보기</button></details>`;
 }
 
-function bindWodHistory(panel) {
+function bindWodHistory(panel, guideId = '') {
   let cursor = '';
   let loaded = false;
   let busy = false;
@@ -130,7 +144,10 @@ function bindWodHistory(panel) {
     more.hidden = true;
     message.textContent = '기록을 불러오는 중입니다.';
     try {
-      const url = '/api/wod/history' + (cursor ? '?before=' + encodeURIComponent(cursor) : '');
+      const filters = new URLSearchParams();
+      if (guideId) filters.set('guide', guideId);
+      if (cursor) filters.set('before', cursor);
+      const url = '/api/wod/history' + (filters.size ? '?' + filters : '');
       const page = await api(url);
       if (!panel.isConnected) return;
       for (const row of page.items) {
@@ -152,6 +169,7 @@ function bindWodHistory(panel) {
   }
   panel.ontoggle = () => { if (panel.open && !loaded) void load(); };
   more.onclick = load;
+  if (panel.open) void load();
 }
 
 async function mountWod(date) {
@@ -192,6 +210,7 @@ async function mountWod(date) {
     if (history) bindWodHistory(history);
   }
   root.onclick = event => {
+    wodGuideClick(event);
     if (!event.target.closest('[data-wod-reload]') || root.getAttribute('aria-busy') === 'true') return;
     if (!wodIsDirty() || confirm('입력한 내용을 버리고 최신 정보를 불러올까요?')) void loadDay();
   };

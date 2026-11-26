@@ -1,4 +1,4 @@
-const labels = { reservations: '수업 예약', wod: '오늘의 와드', members: '박스 회원 관리', zonda: '존다 프로그램', today: '오늘의 현황', team: '우리 팀 식단', board: '전체 식단', record: '데일리 기록', progress: '나의 변화', settings: '내 설정', admin: '팀 · 역할 관리', accounts: '존다 참가자', naver: '네이버 카페 연결', connect: '카페 연동 신청' };
+const labels = { reservations: '수업 예약', wod: '오늘의 와드', guide: '크로스핏 가이드', members: '박스 회원 관리', zonda: '존다 프로그램', today: '오늘의 현황', team: '우리 팀 식단', board: '전체 식단', record: '데일리 기록', progress: '나의 변화', settings: '내 설정', admin: '팀 · 역할 관리', accounts: '존다 참가자', naver: '네이버 카페 연결', connect: '카페 연동 신청' };
 const blankState = () => ({ settings: { name: '', startWeight: '', goalWeight: '' }, records: {} });
 let state = blankState();
 let session = null;
@@ -25,6 +25,7 @@ function navIcon(page) {
   const paths = {
     reservations: '<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v5m10-5v5M3 11h18m-13 4h3"/>',
     wod: '<path d="M3 10v4m3-7v10m3-12v14m6-14v14m3-12v10m3-7v4M9 12h6"/>',
+    guide: '<path d="M12 6C9 4 6 4 3 4v14c3 0 6 0 9 2 3-2 6-2 9-2V4c-3 0-6 0-9 2Zm0 0v14"/>',
     members: '<circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2m3-12v6m-3-3h6"/>',
     zonda: '<path d="M20 3C11 3 4 5 4 13a6 6 0 0 0 6 6c8 0 10-9 10-16ZM3 21l11-11"/>',
     today: '<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/>',
@@ -91,7 +92,7 @@ function resolvePage(route, detail) {
   if (session.pendingApproval) return 'connect';
   if (route === 'members' && session.isAdmin) return 'members';
   if (!route || route === 'reservations') return 'reservations';
-  if (route === 'wod') return 'wod';
+  if (route === 'wod' || route === 'guide') return route;
   if (route === 'zonda') return session.isAdmin ? 'admin' : bootstrap.zondaParticipant ? 'today' : 'zonda';
   const programRoutes = session.isAdmin ? adminProgramRoutes : memberProgramRoutes;
   if (session.isAdmin || bootstrap.zondaParticipant) {
@@ -103,12 +104,12 @@ function resolvePage(route, detail) {
 function renderShell(page) {
   document.body.classList.toggle('is-admin', session.isAdmin);
   document.body.classList.toggle('is-pending-member', Boolean(session.pendingApproval));
-  const inBox = ['reservations','wod','members','zonda'].includes(page);
+  const inBox = ['reservations','wod','guide','members','zonda'].includes(page);
   document.body.classList.toggle('in-box', inBox);
   document.body.classList.toggle('in-zonda', !inBox && !session.pendingApproval);
   let routes;
   if (inBox) {
-    routes = [['reservations','수업 예약','수업 예약'],['wod','오늘의 와드','와드']];
+    routes = [['reservations','수업 예약','수업 예약'],['wod','오늘의 와드','와드'],['guide','크로스핏 가이드','가이드']];
     if (session.isAdmin) routes.push(['members','박스 회원 관리','회원 관리']);
     routes.push(['zonda','존다 프로그램','존다']);
   } else {
@@ -178,6 +179,7 @@ function render() {
   cleanupNaverUI();
   cleanupReservations();
   cleanupBookingNotifications();
+  cleanupGuide();
   cleanupBoxMembers();
   renderedHash = location.hash;
   document.body.classList.remove('auth-pending');
@@ -215,7 +217,7 @@ function render() {
   document.querySelectorAll('[data-page]').forEach(node => { node.classList.toggle('active', node.dataset.page === page); if (node.dataset.page === page) node.setAttribute('aria-current','page'); else node.removeAttribute('aria-current'); });
   mobileNavigation.sync();
   const validDate = date && /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(`${date}T12:00:00`)) && date <= todayKey();
-  const views = {reservations:reservationsView, wod:wodView, members:boxMembersView,
+  const views = {reservations:reservationsView, wod:wodView, guide:guideView, members:boxMembersView,
     zonda:() => '<div class="page-heading"><h1>존다 프로그램</h1><p class="subtitle">팀별로 식단과 운동을 기록하는 8주 프로그램입니다. 참여를 원하면 박스 관리자에게 참가 등록을 요청해주세요.</p></div><a class="button secondary" href="#reservations">수업 예약으로 돌아가기</a>',
     today:todayView,team:()=>mealLoadingView(false),board:()=>mealLoadingView(true),record:()=>recordView(validDate ? date : todayKey()),progress:progressView,settings:settingsView,admin:adminView,accounts:accountsView,naver:naverAdminView,connect:naverOnboardingView};
   app.innerHTML = views[page]();
@@ -225,6 +227,7 @@ function render() {
     if (!session.isAdmin) mountBookingNotifications();
   }
   if (page === 'wod') mountWod(date);
+  if (page === 'guide') mountGuide();
   if (page === 'members') mountBoxMembers();
   if (page === 'admin') bindAdmin();
   if (page === 'naver') mountNaverAdmin();
