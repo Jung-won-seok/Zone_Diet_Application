@@ -8,7 +8,8 @@ function guideContext(extra = {}) {
     escapeHTML: text => String(text).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;'),
     ...extra
   });
-  for (const file of ['guide-movements', 'guide-benchmarks', 'guide-terms', 'guide-match', 'guide']) {
+  for (const file of ['guide-movements', 'guide-benchmarks', 'guide-terms', 'guide-match',
+    'motion-strength', 'motion-bodyweight', 'motion-equipment', 'motion-timeline', 'motion-player', 'guide']) {
     vm.runInContext(fs.readFileSync(require.resolve('../' + file), 'utf8'), context);
   }
   return context;
@@ -46,8 +47,9 @@ test('guide searches across categories, combines filters with aliases and can re
 });
 
 test('movement guide loads video only on activation and returns focus without scrolling or changing route', () => {
-  let current, frame, returned = false;
+  let current, frame, returned = false, pauses = 0, disposals = 0;
   const host = { append(dialog) { current = dialog; } };
+  const simulator = { addEventListener() {} }, video = {};
   const document = {
     querySelector(selector) { return selector === '#app' ? host : current; },
     createElement(tag) {
@@ -55,24 +57,38 @@ test('movement guide loads video only on activation and returns focus without sc
       return {
         setAttribute() {}, showModal() { this.open = true; },
         remove() { current = null; }, close() { this.onclose(); },
-        querySelector() { return null; }
+        querySelector(selector) {
+          if (selector === '[data-motion-player]') return simulator;
+          if (selector === '.guide-demo') return video;
+          return null;
+        }
       };
     }
   };
   const ui = guideContext({ document, session: { isAdmin: false } });
+  ui.mountMovementPlayer = () => ({ pause() { pauses++; }, dispose() { disposals++; } });
   const opener = { isConnected: true, focus(options) { returned = options.preventScroll; } };
   ui.openGuideEntry('toes-to-bar', opener);
   assert.equal(current.open, true);
+  assert.match(current.innerHTML, /data-motion-player/);
+  assert.match(current.innerHTML, /<details class="guide-demo"><summary>공식 시범 영상/);
   assert.doesNotMatch(current.innerHTML, /<iframe/);
   assert.match(current.innerHTML, /https:\/\/www.youtube.com\/watch\?v=/);
   const token = current.innerHTML.match(/data-guide-video="([\w-]+)"/)[1];
   const play = { dataset: { guideVideo: token }, replaceWith(node) { frame = node; } };
+  video.open = true;
+  video.ontoggle();
+  assert.equal(pauses, 1);
   current.onclick({ target: { closest(selector) { return selector === '[data-guide-video]' ? play : null; } } });
   assert.equal(frame.src, 'https://www.youtube-nocookie.com/embed/' + token + '?autoplay=1&playsinline=1');
   assert.equal(frame.referrerPolicy, 'strict-origin-when-cross-origin');
   current.onclick({ target: { closest(selector) { return selector === '.guide-close' ? {} : null; } } });
   assert.equal(current, null);
   assert.equal(returned, true);
+  assert.equal(disposals, 1);
+  ui.openGuideEntry('toes-to-bar', opener);
+  ui.cleanupGuide();
+  assert.equal(disposals, 2);
 });
 
 test('only benchmark detail for a member offers personal benchmark history', () => {
@@ -80,6 +96,7 @@ test('only benchmark detail for a member offers personal benchmark history', () 
   const entries = ui.guideEntries();
   const find = id => entries.find(item => item.id === id);
   assert.match(ui.guideDetail(find('fran'), true), /내 지난 기록/);
+  assert.doesNotMatch(ui.guideDetail(find('fran'), true), /data-motion-player/);
   assert.doesNotMatch(ui.guideDetail(find('fran'), false), /내 지난 기록/);
   assert.doesNotMatch(ui.guideDetail(find('amrap'), true), /내 지난 기록/);
   assert.doesNotMatch(ui.guideDetail(find('toes-to-bar'), true), /내 지난 기록/);

@@ -72,12 +72,16 @@ function mountGuide() {
   update();
 }
 
-function guideDetail(entry, showHistory) {
+function guideVideoButton(id) {
+  return `<button class="guide-play" type="button" data-guide-video="${id}">
+    <span aria-hidden="true">▶</span> 시범 영상 재생</button>`;
+}
+
+function guideDetail(entry, showHistory, motion) {
   const videoId = /^[A-Za-z0-9_-]{11}$/.test(entry.videoId || '') ? entry.videoId : '';
-  const video = videoId ? `<section class="guide-demo"><h3>동작 시범</h3>
-    <div class="guide-player"><button class="guide-play" type="button" data-guide-video="${videoId}">
-      <span aria-hidden="true">▶</span> 시범 영상 재생</button></div>
-    <a class="guide-link" href="https://www.youtube.com/watch?v=${videoId}" target="_blank" rel="noopener noreferrer">YouTube에서 보기 ↗</a></section>` : '';
+  const video = videoId ? `<details class="guide-demo"><summary>공식 시범 영상</summary>
+    <div class="guide-player">${guideVideoButton(videoId)}</div>
+    <a class="guide-link" href="https://www.youtube.com/watch?v=${videoId}" target="_blank" rel="noopener noreferrer">YouTube에서 보기 ↗</a></details>` : '';
   const workout = entry.workout?.length ? `<section><h3>운동 구성</h3><ul class="guide-workout">
     ${entry.workout.map(line => '<li>' + escapeHTML(line) + '</li>').join('')}</ul></section>` : '';
   const history = showHistory && entry.category === 'benchmark'
@@ -88,7 +92,7 @@ function guideDetail(entry, showHistory) {
       <button class="guide-close" type="button" aria-label="가이드 닫기" autofocus>닫기</button></header>
     <div class="guide-dialog-body"><p>${escapeHTML(entry.description)}</p>
       ${entry.cue ? '<p>' + escapeHTML(entry.cue) + '</p>' : ''}
-      ${video}${workout}
+      ${motion ? movementPlayerView(motion) : ''}${video}${workout}
       ${entry.scoring ? '<section><h3>기록 방법</h3><p>' + escapeHTML(entry.scoring) + '</p></section>' : ''}
       ${entry.example ? '<section><h3>예시</h3><p>' + escapeHTML(entry.example) + '</p></section>' : ''}
       ${history}
@@ -96,9 +100,17 @@ function guideDetail(entry, showHistory) {
     </div>`;
 }
 
+const guideMotionPlayers = new WeakMap();
+
+function removeGuideDialog(dialog) {
+  guideMotionPlayers.get(dialog)?.dispose();
+  guideMotionPlayers.delete(dialog);
+  dialog.remove();
+}
+
 function cleanupGuide() {
   const dialog = document.querySelector('.guide-dialog');
-  if (dialog) dialog.remove();
+  if (dialog) removeGuideDialog(dialog);
 }
 
 function openGuideEntry(id, opener) {
@@ -110,10 +122,11 @@ function openGuideEntry(id, opener) {
   dialog.className = 'guide-dialog';
   dialog.setAttribute('aria-labelledby', 'guide-detail-title');
   dialog.setAttribute('closedby', 'any');
-  dialog.innerHTML = guideDetail(entry, Boolean(session && !session.isAdmin && !session.pendingApproval));
+  const motion = entry.category === 'movement' ? getMovementMotion(entry.id) : null;
+  dialog.innerHTML = guideDetail(entry, Boolean(session && !session.isAdmin && !session.pendingApproval), motion);
   host.append(dialog);
   dialog.onclose = () => {
-    dialog.remove();
+    removeGuideDialog(dialog);
     if (opener?.isConnected) opener.focus({ preventScroll: true });
   };
   dialog.onclick = event => {
@@ -128,6 +141,7 @@ function openGuideEntry(id, opener) {
     }
     const play = event.target.closest('[data-guide-video]');
     if (play) {
+      guideMotionPlayers.get(dialog)?.pause();
       const frame = document.createElement('iframe');
       frame.title = entry.name + ' 동작 시범 영상';
       frame.referrerPolicy = 'strict-origin-when-cross-origin';
@@ -139,6 +153,21 @@ function openGuideEntry(id, opener) {
     }
   };
   dialog.showModal();
+  const simulator = dialog.querySelector('[data-motion-player]');
+  if (simulator) {
+    const player = mountMovementPlayer(simulator, motion);
+    guideMotionPlayers.set(dialog, player);
+    const video = dialog.querySelector('.guide-demo');
+    if (video) {
+      video.ontoggle = () => {
+        if (video.open) player.pause();
+        else if (video.querySelector('iframe')) video.querySelector('.guide-player').innerHTML = guideVideoButton(entry.videoId);
+      };
+      const closeVideo = () => { if (video.open) video.open = false; };
+      simulator.addEventListener('click', closeVideo);
+      simulator.addEventListener('input', closeVideo);
+    }
+  }
   const history = dialog.querySelector('.guide-history');
   if (history) bindWodHistory(history, entry.id);
 }

@@ -1,0 +1,116 @@
+.motion-player {
+  min-width: 0;
+  color: var(--ink);
+}
+.motion-player h3 { margin: 0 0 8px; }
+.motion-card {
+  overflow: hidden;
+  border: 1px solid #cfdbce;
+  border-radius: 14px;
+  background: white;
+}
+.motion-card canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 320 / 220;
+  background: #f1f5ec;
+}
+.motion-controls {
+  padding: 10px 14px 3px;
+  border-top: 1px solid var(--line);
+}
+.motion-toolbar {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+.motion-toolbar strong {
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.motion-toolbar button, .motion-phases button {
+  min-height: 44px;
+  border-radius: 8px;
+  font-weight: 650;
+}
+.motion-play {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 6px 13px;
+  white-space: nowrap;
+  color: #fff;
+  background: var(--green);
+}
+.motion-play [data-motion-icon] {
+  width: 14px;
+  color: var(--lime);
+  font-size: 12px;
+  text-align: center;
+}
+.motion-rate {
+  min-width: 46px;
+  padding: 6px 9px;
+  border: 1px solid #cbd6c8;
+  color: var(--green);
+  background: white;
+  font-size: 13px;
+}
+.motion-rate[data-slow="true"] {
+  border-color: var(--green);
+  background: #e7efdf;
+}
+.motion-timeline {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  margin-top: 10px;
+  color: #536759;
+  font-size: 12px;
+}
+.motion-clock { font-variant-numeric: tabular-nums; }
+.motion-clock b { color: var(--green); }
+.motion-timeline input {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  margin: 0;
+  accent-color: var(--green);
+  cursor: pointer;
+  touch-action: pan-y;
+}
+.motion-timeline input:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 1px;
+  border-radius: 5px;
+}
+.motion-phases {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 9px;
+}
+.motion-phases button {
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  background: white;
+  color: #405a49;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.motion-phases button[aria-current="step"] {
+  border-color: #6a8963;
+  background: #edf5e4;
+  color: #234930;
+}
+@media (max-width: 380px) {
+  .motion-toolbar { gap: 6px; }
+  .motion-controls { padding-inline: 10px; }
+  .motion-play { padding-inline: 9px; }
+}

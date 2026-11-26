@@ -140,6 +140,7 @@
 .guide-history { border-top: 1px solid var(--line); padding-top: 14px; }
 .guide-link { justify-self: start; color: var(--green); text-decoration: underline; text-underline-offset: 3px; }
 .guide-demo .guide-link { display: inline-block; margin-top: 7px; }
+.guide-demo summary { cursor: pointer; color: var(--green); font-weight: 650; padding: 9px 0; }
 .guide-player { width: 100%; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; background: var(--green); }
 .guide-player iframe { display: block; width: 100%; height: 100%; border: 0; }
 .guide-play { display: grid; align-content: center; justify-items: center; gap: 8px; width: 100%; height: 100%; padding: 12px; color: white; background: var(--green); }
@@ -158,6 +159,7 @@
 }
 
 @media (max-width: 580px) {
+  #guide-page { padding-bottom: var(--mobile-nav-clearance); }
   .guide-tools { padding: 16px; }
   .guide-search input { font-size: 16px; }
   .guide-group ul { grid-template-columns: minmax(0, 1fr); }

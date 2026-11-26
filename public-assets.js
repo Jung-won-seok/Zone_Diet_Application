@@ -6,6 +6,8 @@ module.exports = [
   'reservations.js', 'member-management.js',
   'schedule-ui.js', 'schedule-ui.css', 'memberships.css',
   'guide-movements.js', 'guide-benchmarks.js', 'guide-terms.js', 'guide-match.js', 'guide.js', 'guide.css',
+  'motion-strength.js', 'motion-bodyweight.js', 'motion-equipment.js', 'motion-timeline.js',
+  'motion-renderer.js', 'motion-player.js', 'motion-player.css',
   'recovery.js', 'wod.js', 'wod.css', 'notifications.js', 'notifications.css', 'push-worker.js',
   'leben.webmanifest', 'leben-192.png', 'leben-512.png',
 ];
