@@ -1,0 +1,11 @@
+.guide-movement-art {
+  position: absolute;
+  inset-block: 0;
+  right: 0;
+  height: 100%;
+  aspect-ratio: 4 / 3;
+  pointer-events: none;
+  background-image: url('guide-movement-poses.png');
+  background-repeat: no-repeat;
+  background-size: 600% 400%;
+}

@@ -2,6 +2,7 @@
 const guideBenchmarks = [
   {
     id: 'fran', name: '프랜', english: 'Fran', aliases: ['프란', '프렌'],
+    gear: 'barbell',
     description: '매 라운드 쓰러스터를 먼저 마치고 같은 횟수의 풀업을 해요.',
     roundReps: [21, 15, 9],
     steps: [{ name: '쓰러스터' }, { name: '풀업' }],
@@ -11,6 +12,7 @@ const guideBenchmarks = [
   },
   {
     id: 'cindy', name: '신디', english: 'Cindy', aliases: ['씬디'],
+    gear: 'rig',
     description: '철봉과 맨몸을 이용하는 세 동작을 20분 동안 반복해요.',
     amrapMinutes: 20,
     steps: [{ name: '풀업', amount: '5회' }, { name: '푸시업', amount: '10회' }, { name: '에어 스쿼트', amount: '15회' }],
@@ -19,6 +21,7 @@ const guideBenchmarks = [
   },
   {
     id: 'grace', name: '그레이스', english: 'Grace', aliases: [],
+    gear: 'barbell',
     description: '바벨을 바닥에서 어깨로 받은 뒤 머리 위로 올려요. 클린과 저크를 연결하면 1회예요.',
     steps: [{ name: '클린 앤 저크', amount: '30회' }],
     rx: [{ label: '바벨', women: '95 lb', men: '135 lb' }],
@@ -27,6 +30,7 @@ const guideBenchmarks = [
   },
   {
     id: 'helen', name: '헬렌', english: 'Helen', aliases: ['헬런'],
+    gear: 'kettlebell',
     description: '달리기에서 케틀벨과 철봉으로 이어지는 세 동작을 3라운드 해요.',
     rounds: 3,
     steps: [{ name: '달리기', amount: '400 m' }, { name: '케틀벨 스윙', amount: '21회' }, { name: '풀업', amount: '12회' }],
@@ -36,6 +40,7 @@ const guideBenchmarks = [
   },
   {
     id: 'annie', name: '애니', english: 'Annie', aliases: ['애니 와드'],
+    gear: 'rope',
     description: '매 라운드 더블 언더를 모두 마친 뒤 같은 횟수의 싯업을 해요.',
     roundReps: [50, 40, 30, 20, 10],
     steps: [{ name: '더블 언더' }, { name: '싯업' }],
@@ -44,6 +49,7 @@ const guideBenchmarks = [
   },
   {
     id: 'diane', name: '다이앤', english: 'Diane', aliases: ['다이안', '다이엔'],
+    gear: 'barbell',
     description: '매 라운드 데드리프트를 끝낸 뒤 같은 횟수의 핸드스탠드 푸시업을 해요.',
     roundReps: [21, 15, 9],
     steps: [{ name: '데드리프트' }, { name: '핸드스탠드 푸시업' }],
@@ -53,6 +59,7 @@ const guideBenchmarks = [
   },
   {
     id: 'jackie', name: '재키', english: 'Jackie', aliases: ['잭키', '재키 와드'],
+    gear: 'rower',
     description: '로잉, 쓰러스터, 풀업을 한 번씩 차례로 마치는 와드예요.',
     steps: [{ name: '로잉', amount: '1,000 m' }, { name: '쓰러스터', amount: '50회' }, { name: '풀업', amount: '30회' }],
     rx: [{ label: '쓰러스터 바벨', women: '35 lb', men: '45 lb' }],
@@ -61,6 +68,7 @@ const guideBenchmarks = [
   },
   {
     id: 'nancy', name: '낸시', english: 'Nancy', aliases: ['낸씨'],
+    gear: 'shoes',
     description: '400 m 달리기와 오버헤드 스쿼트를 번갈아 해요.',
     rounds: 5,
     steps: [{ name: '달리기', amount: '400 m' }, { name: '오버헤드 스쿼트', amount: '15회' }],
@@ -70,6 +78,7 @@ const guideBenchmarks = [
   },
   {
     id: 'karen', name: '카렌', english: 'Karen', aliases: ['캐런', '캐렌', '카런'],
+    gear: 'ball',
     description: '정해진 높이의 표적을 향해 월볼 샷 150회를 해요.',
     steps: [{ name: '월볼 샷', amount: '150회' }],
     rx: [{ label: '공 무게', women: '14 lb', men: '20 lb' }, { label: '표적 높이', women: '9 ft', men: '10 ft' }],
@@ -78,6 +87,7 @@ const guideBenchmarks = [
   },
   {
     id: 'isabel', name: '이사벨', english: 'Isabel', aliases: ['이자벨'],
+    gear: 'barbell',
     description: '바벨 스내치 30회를 마치는 시간을 재요.',
     steps: [{ name: '바벨 스내치', amount: '30회' }],
     rx: [{ label: '바벨', women: '95 lb', men: '135 lb' }],
@@ -86,6 +96,7 @@ const guideBenchmarks = [
   },
   {
     id: 'angie', name: '앤지', english: 'Angie', aliases: ['엔지'],
+    gear: 'rig',
     description: '한 동작을 100회 모두 마치면 다음 동작으로 넘어가요. 풀업으로 시작해 에어 스쿼트로 끝나요.',
     steps: [{ name: '풀업', amount: '100회' }, { name: '푸시업', amount: '100회' },
       { name: '싯업', amount: '100회' }, { name: '에어 스쿼트', amount: '100회' }],
@@ -94,6 +105,7 @@ const guideBenchmarks = [
   },
   {
     id: 'elizabeth', name: '엘리자베스', english: 'Elizabeth', aliases: ['엘리자벳'],
+    gear: 'rings',
     description: '클린과 링 딥을 차례로 해요. 첫 라운드에는 각 21회, 두 번째에는 각 15회, 마지막에는 각 9회를 해요.',
     roundReps: [21, 15, 9],
     steps: [{ name: '클린' }, { name: '링 딥' }],
@@ -103,6 +115,7 @@ const guideBenchmarks = [
   },
   {
     id: 'mary', name: '메리', english: 'Mary', aliases: [],
+    gear: 'rig',
     description: '물구나무 푸시업, 한 발 스쿼트, 풀업을 20분간 반복해요. 한 발 스쿼트는 좌우를 번갈아 총 10회 해요.',
     amrapMinutes: 20,
     steps: [{ name: '핸드스탠드 푸시업', amount: '5회' }, { name: '피스톨 스쿼트', amount: '10회' }, { name: '풀업', amount: '15회' }],
@@ -111,6 +124,7 @@ const guideBenchmarks = [
   },
   {
     id: 'kelly', name: '켈리', english: 'Kelly', aliases: ['캘리'],
+    gear: 'box',
     description: '400 m를 달리고 박스 점프와 월볼 샷을 각 30회 하면 한 라운드예요.',
     rounds: 5,
     steps: [{ name: '달리기', amount: '400 m' }, { name: '박스 점프', amount: '30회' }, { name: '월볼 샷', amount: '30회' }],
@@ -120,6 +134,7 @@ const guideBenchmarks = [
   },
   {
     id: 'eva', name: '에바', english: 'Eva', aliases: ['이바'],
+    gear: 'kettlebell',
     description: '매 라운드 800 m를 달린 뒤 케틀벨 스윙 30회와 풀업 30회를 이어가요.',
     rounds: 5,
     steps: [{ name: '달리기', amount: '800 m' }, { name: '케틀벨 스윙', amount: '30회' }, { name: '풀업', amount: '30회' }],
@@ -129,6 +144,7 @@ const guideBenchmarks = [
   },
   {
     id: 'amanda', name: '아만다', english: 'Amanda', aliases: ['어맨다'],
+    gear: 'rings',
     description: '링 머슬업을 마친 뒤 같은 횟수의 스쿼트 스내치를 해요. 라운드마다 각 동작이 9회에서 7회, 5회로 줄어요.',
     roundReps: [9, 7, 5],
     steps: [{ name: '링 머슬업' }, { name: '스쿼트 스내치' }],
@@ -138,6 +154,7 @@ const guideBenchmarks = [
   },
   {
     id: 'chelsea', name: '첼시', english: 'Chelsea', aliases: [],
+    gear: 'rig',
     description: '30분 동안 매분 정각에 세 동작을 시작해요. 한 라운드를 일찍 마치면 다음 분까지 쉬어요.',
     emomMinutes: 30,
     steps: [{ name: '풀업', amount: '5회' }, { name: '푸시업', amount: '10회' }, { name: '에어 스쿼트', amount: '15회' }],
@@ -146,6 +163,11 @@ const guideBenchmarks = [
   },
   {
     id: 'dt', name: '디티', english: 'DT', aliases: ['디 티', 'D.T.'],
+    gear: 'barbell',
+    portrait: {
+      file: 'guide-portrait-dt.webp', name: '티머시 P. 데이비스',
+      credit: '미 특수작전사령부', source: 'https://www.socom.mil/TipOfTheSpear/March%202009%20Tip%20of%20the%20Spear.pdf#page=55',
+    },
     description: '하나의 바벨로 데드리프트, 행 파워 클린, 푸시 저크를 이어가는 히어로 와드예요.',
     rounds: 5,
     steps: [{ name: '데드리프트', amount: '12회' }, { name: '행 파워 클린', amount: '9회' }, { name: '푸시 저크', amount: '6회' }],
@@ -155,6 +177,11 @@ const guideBenchmarks = [
   },
   {
     id: 'murph', name: '머프', english: 'Murph', aliases: ['머프 와드'],
+    gear: 'shoes',
+    portrait: {
+      file: 'guide-portrait-murph.webp', name: '마이클 P. 머피',
+      credit: '미 해군', source: 'https://commons.wikimedia.org/wiki/File:Michael_P._Murphy_portrait.jpg',
+    },
     description: '1마일 달리기로 시작하고 끝나는 히어로 와드예요. 중간의 풀업·푸시업·에어 스쿼트는 여러 세트로 나눠도 돼요.',
     steps: [{ name: '시작 달리기', amount: '1마일' }, { name: '풀업', amount: '100회' },
       { name: '푸시업', amount: '200회' }, { name: '에어 스쿼트', amount: '300회' }, { name: '마무리 달리기', amount: '1마일' }],

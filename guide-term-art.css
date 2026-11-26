@@ -1,0 +1,123 @@
+.guide-term-art {
+  display: block;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  container-type: size;
+  pointer-events: none;
+  color: #e6e8e6;
+}
+
+.guide-term-art i { display: block; font-style: normal; box-sizing: border-box; }
+.guide-term-art .gt-face {
+  position: absolute;
+  top: 50%;
+  right: 6%;
+  width: 9em;
+  height: 5.6em;
+  font-size: min(9cqw, 14cqh);
+  transform: translateY(-50%);
+}
+.gt-face > i { position: absolute; }
+.gt-face .gt-digits, .gt-face .gt-scale {
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.gt-face .gt-digits { font-size: 2.65em; font-weight: 700; letter-spacing: -.08em; }
+
+/* The day's workout written up in three lines on a clipboard. */
+.gt-paper {
+  inset: 9% 17% 6% 21%; padding: 12% 9% 0;
+  border: .12em solid currentColor; border-radius: .19em;
+  transform: rotate(-7deg); box-shadow: .3em .28em 0 -.07em #717471;
+}
+.gt-paper::before {
+  content: ""; position: absolute; width: 41%; height: .44em;
+  top: -.26em; left: 30%; background: currentColor; border-radius: .08em;
+}
+.gt-paper i {
+  position: relative; height: .11em; margin: 0 0 .58em .45em;
+  background: currentColor; opacity: .8;
+}
+.gt-paper i::before {
+  content: ""; position: absolute; left: -.5em; top: -.04em;
+  width: .2em; height: .2em; border-radius: 50%; background: currentColor;
+}
+.gt-paper i:nth-child(2) { width: 61%; }
+.gt-paper i:nth-child(3) { width: 80%; }
+
+/* A fixed clock with an open sequence of completed round markers. */
+.gt-amrap .gt-digits { top: 19%; left: 5%; }
+.gt-progress {
+  left: 9%; bottom: 13%; width: 78%; height: .45em;
+  background: repeating-linear-gradient(90deg, currentColor 0 .63em, transparent .63em .88em);
+  mask-image: linear-gradient(90deg, #000 55%, transparent);
+}
+
+/* Equal minute markers, each starting a new work interval. */
+.gt-intervals {
+  inset: 25% 4% 41%; border-bottom: .16em solid currentColor;
+  background: repeating-linear-gradient(90deg, currentColor 0 .14em, transparent .14em 3.84em),
+    repeating-linear-gradient(90deg, #949794 0 .09em, transparent .09em .64em) left bottom / 100% 30% no-repeat;
+}
+.gt-face .gt-scale { display: flex; justify-content: space-between; left: 4%; right: 6%; top: 66%; font-size: .82em; }
+
+/* Stopwatch with a saved finishing time. */
+.gt-watch { left: 4%; top: 19%; width: 3.35em; height: 3.35em; border: .17em solid currentColor; border-radius: 50%; }
+.gt-watch::before { content: ""; position: absolute; top: -.53em; left: 36%; width: 28%; height: .3em; background: currentColor; }
+.gt-hand { position: absolute; top: 18%; left: 48%; height: 35%; width: .14em; background: currentColor; transform-origin: center bottom; transform: rotate(40deg); }
+.gt-for-time .gt-digits { font-size: 1.7em; top: 45%; right: 0; }
+
+/* A prescription stamp, with a check earned for meeting the standard. */
+.gt-face .gt-stamp {
+  left: 9%; top: 14%; padding: .02em .28em .13em;
+  border: .06em solid currentColor; border-radius: .1em;
+  font: italic 700 3.05em/1 Georgia, serif; transform: rotate(-8deg);
+}
+.gt-check { right: 9%; top: 47%; width: 1.62em; height: .85em; border: solid currentColor; border-width: 0 0 .22em .22em; transform: rotate(-45deg); }
+
+/* Three independent settings stand for load, movement and volume. */
+.gt-slider { left: 10%; right: 10%; height: .1em; background: #929592; }
+.gt-slider:nth-child(1) { top: 20%; --knob: 67%; }
+.gt-slider:nth-child(2) { top: 49%; --knob: 29%; }
+.gt-slider:nth-child(3) { top: 78%; --knob: 50%; }
+.gt-slider::before {
+  content: ""; position: absolute; left: var(--knob); top: -.38em;
+  height: .86em; width: .34em; border-radius: .06em; background: currentColor;
+}
+
+.gt-tally {
+  top: 23%; left: 9%; height: 53%; width: 2.74em; transform: skew(-8deg);
+  background: repeating-linear-gradient(90deg, currentColor 0 .2em, transparent .2em .84em);
+}
+.gt-tally:nth-child(2) { left: 56%; }
+.gt-tally::after {
+  content: ""; position: absolute; left: -.22em; right: -.24em; top: 48%;
+  height: .17em; background: currentColor; transform: rotate(-27deg);
+}
+
+/* Three stations and a return arrow complete the circuit. */
+.gt-circuit { inset: 23% 11%; border: .13em solid #939693; border-radius: 3em; }
+.gt-circuit > i { position: absolute; width: .68em; height: .68em; border-radius: 50%; background: currentColor; }
+.gt-circuit > i:nth-child(1) { top: -.38em; left: 22%; }
+.gt-circuit > i:nth-child(2) { top: -.38em; right: 22%; }
+.gt-circuit > i:nth-child(3) { bottom: -.38em; right: 22%; }
+.gt-circuit::after {
+  content: ""; position: absolute; bottom: -.34em; left: 24%;
+  width: .48em; height: .48em; transform: rotate(45deg); border: solid currentColor; border-width: 0 0 .17em .17em;
+}
+
+.gt-time-cap .gt-digits { left: 2%; top: 20%; }
+.gt-deadline { left: 3%; right: 7%; bottom: 17%; height: .12em; background: #939693; }
+.gt-deadline::after {
+  content: ""; position: absolute; right: 0; bottom: -.2em; width: .34em; height: 3.65em;
+  background: repeating-linear-gradient(-45deg, currentColor 0 .22em, transparent .22em .37em);
+}
+
+/* Three attempts against a common reference line. */
+.gt-face .gt-bars { inset: 12% 11% 14%; display: flex; align-items: end; gap: .55em; border-bottom: .11em solid currentColor; }
+.gt-bars i { width: 24%; height: 38%; background: #767976; }
+.gt-bars i:nth-child(2) { height: 61%; background: #aaadaa; }
+.gt-bars i:nth-child(3) { height: 91%; background: currentColor; }
+.gt-reference { left: 5%; right: 3%; top: 47%; border-top: .12em dashed currentColor; }

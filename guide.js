@@ -40,6 +40,20 @@ function guideFactValue(fact) {
   return fact.english ? `<span lang="en">${value}</span>` : value;
 }
 
+function guideArtwork(entry) {
+  let art;
+  if (entry.category === 'movement') {
+    art = guideMovementArt(entry);
+  } else if (entry.category === 'term') {
+    art = guideTermArt(entry);
+  } else {
+    const gear = entry.gear ? `<span class="guide-gear guide-gear-${escapeHTML(entry.gear)}"></span>` : '';
+    const portrait = entry.portrait ? `<img class="guide-portrait guide-portrait-${escapeHTML(entry.id)}" src="${escapeHTML(entry.portrait.file)}" alt="" loading="lazy" decoding="async">` : '';
+    art = gear + portrait;
+  }
+  return `<span class="guide-artwork" aria-hidden="true">${art}</span>`;
+}
+
 function guideResultRow(entry) {
   const isMovement = entry.category === 'movement';
   const english = guideEnglishLabel(entry, isMovement ? 1 : Infinity);
@@ -49,8 +63,9 @@ function guideResultRow(entry) {
     const description = entry.category === 'benchmark' ? entry.steps.map(step => step.name).join(' · ') : entry.description;
     summary = `<span class="guide-card-facts">${facts}</span><span class="guide-card-description">${escapeHTML(description)}</span>`;
   }
-  return `<li><button type="button" class="guide-row${isMovement ? ' guide-movement-row' : ''}" data-guide-entry="${escapeHTML(entry.id)}" aria-haspopup="dialog">
-      <span><span class="guide-card-name"><strong>${escapeHTML(entry.name)}</strong><small lang="en">${escapeHTML(english)}</small></span>${summary}</span>
+  return `<li><button type="button" class="guide-row guide-${entry.category}-row" data-guide-entry="${escapeHTML(entry.id)}" aria-haspopup="dialog">
+      ${guideArtwork(entry)}
+      <span class="guide-card-copy"><span class="guide-card-name"><strong>${escapeHTML(entry.name)}</strong><small lang="en">${escapeHTML(english)}</small></span>${summary}</span>
       <span aria-hidden="true" class="guide-chevron">›</span></button></li>`;
 }
 
@@ -213,10 +228,12 @@ function guideDetail(entry, showHistory, motion) {
   const history = showHistory && entry.category === 'benchmark'
     ? `<details class="wod-history guide-history" open><summary>내 지난 기록</summary><ul></ul>
       <p role="status"></p><button type="button" class="button secondary" data-history-more hidden>더 보기</button></details>` : '';
-  return `<header class="guide-dialog-header"><div><p class="guide-kind">${guideCategories[entry.category]}</p>
+  const photo = entry.portrait;
+  const credit = photo ? `<p class="guide-photo-credit">사진 속 인물 · ${escapeHTML(photo.name)} <a href="${escapeHTML(photo.source)}" target="_blank" rel="noopener noreferrer">${escapeHTML(photo.credit)} ↗</a></p>` : '';
+  return `<header class="guide-dialog-header guide-${entry.category}-row">${guideArtwork(entry)}<div class="guide-heading-copy"><p class="guide-kind">${guideCategories[entry.category]}</p>
       <h2 id="guide-detail-title">${escapeHTML(entry.name)}</h2><p class="guide-english" lang="en">${escapeHTML(guideEnglishLabel(entry))}</p></div>
       <button class="guide-close" type="button" aria-label="가이드 닫기" autofocus>닫기</button></header>
-    <div class="guide-dialog-body">${summary}${content}
+    <div class="guide-dialog-body">${credit}${summary}${content}
       ${motion ? movementPlayerView(motion) : ''}${video}
       ${history}
       ${entry.sourceUrl ? `<a class="guide-link" href="${escapeHTML(entry.sourceUrl)}" target="_blank" rel="noopener noreferrer">CrossFit 공식 자료 ↗</a>` : ''}
