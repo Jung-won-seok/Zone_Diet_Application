@@ -22,17 +22,20 @@ function shiftBookingDate(date, days) {
 function reservationsView() {
   return `<div class="booking-dashboard"><header class="box-schedule-heading">
       <h1>수업 예약</h1>
-      <p>수업 전날 <strong>00:00</strong>에 예약이 열려요. <small>한국 시간 기준</small></p>
-      <p>대기 포함 하루 한 수업을 신청할 수 있어요.<br>취소 자리는 대기 순서대로 확정돼요.</p>
+      <details class="booking-rules"><summary>예약 안내</summary>
+        <p>수업 전날 <strong>00:00</strong>에 예약이 열려요. <small>한국 시간 기준</small></p>
+        <p>대기 포함 하루 한 수업을 신청할 수 있어요.<br>취소 자리는 대기 순서대로 확정돼요.</p></details>
     </header>
+    <div id="box-schedule"></div>
     <div class="booking-utilities"><div id="booking-notifications"></div><div id="coach-schedule"></div></div>
-    <div id="box-schedule"></div></div>`;
+    <p class="sr-only" data-book-announcement role="status" aria-live="polite"></p></div>`;
 }
 
 function cleanupReservations() {
   if (!reservationPage) return;
   clearTimeout(reservationPage.refreshTimer);
   document.removeEventListener('visibilitychange', reservationPage.onVisible);
+  reservationPage.rulesLayout.removeEventListener('change', reservationPage.onRulesLayout);
   reservationPage = null;
 }
 
@@ -115,7 +118,7 @@ function bookingMembershipCard(membership, date) {
     <p>${description}</p>${restriction ? '<p class="booking-membership-limit">' + restriction + '</p>' : ''}</section>`;
 }
 
-function bookingClassRow(slot, isAdmin, booked, membership, date, dayReason) {
+function bookingClassRow(slot, isAdmin, booked, membership, date, dayReason, feedback) {
   const waiting = slot.myStatus === 'waiting';
   const mine = waiting || slot.myStatus === 'confirmed';
   const available = slot.confirmedCount < slot.capacity;
@@ -145,37 +148,64 @@ function bookingClassRow(slot, isAdmin, booked, membership, date, dayReason) {
       operation = 'change';
       label = '이 시간으로 변경';
     }
+    if (feedback?.status === 'error' && feedback.request.action === operation &&
+        (operation !== 'change' || feedback.request.fromStartTime === booked.startTime)) {
+      if (operation === 'reserve') {
+        if (available) label = feedback.request.waitlist ? '예약하기' : '예약 다시 시도';
+        else label = feedback.request.waitlist ? '대기 신청 다시 시도' : '대기 신청';
+      }
+      else label = operation === 'change' ? '변경 다시 시도' : '취소 다시 시도';
+    }
     action = `<button type="button" class="button booking-action ${mine ? 'secondary' : ''}"
       data-book-time="${escapeHTML(slot.startTime)}" data-book-action="${operation}"
       aria-label="${escapeHTML(slot.startTime)} 수업 ${label}">${label}</button>`;
   }
+  if (feedback?.status === 'unknown') {
+    action = `<button type="button" class="button booking-action secondary" data-book-verify>현황 다시 확인</button>`;
+  }
+  const result = feedback ? `<p class="booking-slot-feedback is-${feedback.status}">${escapeHTML(feedback.message)}</p>` : '';
   const special = slot.kind === 'special'
     ? `<p class="booking-special"><strong>특별 수업</strong>${slot.label && slot.label !== '특별 수업' ? ' · ' + escapeHTML(slot.label) : ''}</p>` : '';
   const reason = slot.cancelled && slot.cancelReason && slot.cancelReason !== dayReason
     ? `<p class="booking-cancel-reason">휴강 사유 · ${escapeHTML(slot.cancelReason)}</p>` : '';
-  return `<li class="booking-row${mine ? ' is-mine' : ''}${slot.closed ? ' is-closed' : ''}${slot.cancelled ? ' is-cancelled' : ''}">
+  return `<li class="booking-row${mine ? ' is-mine' : ''}${slot.closed ? ' is-closed' : ''}${slot.cancelled ? ' is-cancelled' : ''}" data-book-slot="${escapeHTML(slot.startTime)}" tabindex="-1">
     ${special}
     <div class="booking-row-main">
       <div class="booking-time"><strong>${escapeHTML(slot.startTime)}</strong><span>– ${escapeHTML(slot.endTime)}</span></div>
       <div class="booking-occupancy"><span>예약 <b>${slot.confirmedCount}</b> / ${slot.capacity}</span><span>대기 <b>${slot.waitlistCount}</b> / ${slot.waitlistCapacity}</span>
         <meter class="booking-capacity" aria-hidden="true" min="0" max="${escapeHTML(slot.capacity)}" value="${escapeHTML(slot.confirmedCount)}"></meter></div>
       <div class="booking-state"><span>${status}</span></div>
-      ${action}</div>${reason}${isAdmin && !slot.cancelled ? bookingRoster(slot) : ''}</li>`;
+      ${action}</div>${reason}${result}${isAdmin && !slot.cancelled ? bookingRoster(slot) : ''}</li>`;
+}
+
+function bookingClassList(page, pastOpen) {
+  const data = page.data;
+  const booked = data.classes.find(slot => slot.startTime === data.myClassStartTime);
+  const list = slots => `<ul class="booking-list">${slots.map(slot => bookingClassRow(slot, session.isAdmin, booked,
+    data.membership, data.date, data.scheduleReason, slot.startTime === page.slotFeedback?.request.startTime ? page.slotFeedback : null)).join('')}</ul>`;
+  const past = data.date === data.today ? data.classes.filter(slot => slot.started) : [];
+  if (!past.length || past.length === data.classes.length) return list(data.classes);
+  const showingResult = past.some(slot => slot.startTime === page.slotFeedback?.request.startTime);
+  return list(data.classes.filter(slot => !slot.started)) +
+    `<details class="booking-past" data-past${pastOpen || showingResult ? ' open' : ''}>
+      <summary>지난 수업 ${past.length}개</summary>${list(past)}</details>`;
 }
 
 function paintReservationDay(page) {
   if (reservationPage !== page) return;
   const host = page.host;
-  const openRosters = new Set([...host.querySelectorAll('details[open]')].map(node => node.dataset.roster));
+  const openRosters = new Set([...host.querySelectorAll('details[data-roster][open]')].map(node => node.dataset.roster));
+  const focused = host.ownerDocument?.activeElement;
+  const focusedRow = focused?.closest('[data-book-slot]');
+  const activeTime = page.slotFeedback?.request.startTime;
+  const activeRow = activeTime && host.querySelector(`[data-book-slot="${activeTime}"]`);
+  const anchor = activeRow?.getBoundingClientRect?.();
   const label = bookingDayLabel.format(new Date(page.date + 'T12:00:00Z'));
   let schedule;
   if (page.data) {
-    const booked = page.data.classes.find(slot => slot.startTime === page.data.myClassStartTime);
     schedule = bookingAvailabilityNotice(page.data);
     if (page.data.classes.length) {
-      schedule += `<ul class="booking-list">${page.data.classes.map(slot =>
-        bookingClassRow(slot, session.isAdmin, booked, page.data.membership, page.date, page.data.scheduleReason)
-      ).join('')}</ul>`;
+      schedule += bookingClassList(page, Boolean(host.querySelector('details[data-past][open]')));
     } else if (!page.data.dayClosed) {
       schedule += '<p class="booking-empty">이 날짜에는 등록된 수업이 없습니다.</p>';
     }
@@ -183,16 +213,45 @@ function paintReservationDay(page) {
     schedule = page.error ? '' : '<p class="booking-empty" role="status">수업을 불러오는 중입니다.</p>';
   }
   const membership = session.isAdmin ? '' : bookingMembershipCard(page.data?.membership, page.date);
-  host.innerHTML = `<div class="booking-planner">${bookingCalendar(page)}${membership}</div>` +
+  host.innerHTML = bookingCalendar(page) +
     `<section class="booking-sessions" aria-label="선택한 날짜의 수업"><div class="booking-list-head"><h2>${label}</h2>
       <button type="button" class="booking-refresh" data-book-refresh>새로고침</button></div>
-      <p class="booking-feedback" role="status" aria-live="polite"></p>${schedule}</section>`;
+      <p class="booking-feedback" role="status" aria-live="polite"></p>${schedule}</section>` + membership;
   host.querySelectorAll('details[data-roster]').forEach(node => { node.open = openRosters.has(node.dataset.roster); });
   const feedback = host.querySelector('.booking-feedback');
-  feedback.textContent = page.error || page.message;
-  feedback.classList.toggle('is-error', Boolean(page.error));
+  const orphaned = activeTime && !page.data?.classes.some(slot => slot.startTime === activeTime);
+  feedback.textContent = page.error || (orphaned ? page.slotFeedback.message : '');
+  feedback.classList.toggle('is-error', Boolean(feedback.textContent));
   feedback.hidden = !feedback.textContent;
-  host.querySelectorAll('button').forEach(button => { button.disabled = page.busy; });
+  host.querySelectorAll('button').forEach(button => {
+    if (page.busy || (page.slotFeedback?.status === 'unknown' && button.hasAttribute('data-book-action'))) {
+      button.setAttribute('aria-disabled', 'true');
+    }
+  });
+  if (focusedRow) {
+    const row = host.querySelector(`[data-book-slot="${focusedRow.dataset.bookSlot}"]`);
+    const selector = focused.dataset.bookAction ? `[data-book-action="${focused.dataset.bookAction}"]` :
+      focused.matches('summary') ? 'summary' : '[data-book-verify]';
+    (row?.querySelector(selector) || row)?.focus({ preventScroll: true });
+  } else if (focused && host.ownerDocument && !focused.isConnected) {
+    const selector = focused.id === 'booking-date' ? '#booking-date' : focused.matches('[data-book-refresh]') ? '[data-book-refresh]' :
+      focused.matches('a[href]') ? `a[href="${focused.getAttribute('href')}"]` : focused.matches('.booking-past summary') ? '.booking-past summary' : null;
+    if (selector) host.querySelector(selector)?.focus({ preventScroll: true });
+  }
+  if (anchor && anchor.bottom > 0 && anchor.top < window.innerHeight) {
+    const row = host.querySelector(`[data-book-slot="${activeTime}"]`);
+    const result = row?.querySelector('.booking-slot-feedback');
+    const nav = window.matchMedia('(max-width: 580px)').matches && document.querySelector('.sidebar');
+    const bottom = (nav ? nav.getBoundingClientRect().top : window.innerHeight) - 8;
+    if (result && anchor.top < bottom) {
+      const layoutShift = row.getBoundingClientRect().top - anchor.top;
+      const revealResult = result.getBoundingClientRect().bottom - bottom;
+      window.scrollBy({top: Math.max(layoutShift, revealResult), behavior: 'instant'});
+    }
+  }
+  const announcement = host.parentElement?.querySelector('[data-book-announcement]');
+  const message = page.slotFeedback?.message || '';
+  if (announcement && announcement.textContent !== message) announcement.textContent = message;
   if (page.coachHost) paintCoachSchedule(page.coachHost, page, () => loadReservationDay(page));
 }
 
@@ -219,15 +278,18 @@ async function loadReservationDay(page) {
   if (page.busy || reservationPage !== page) return;
   page.busy = true;
   page.error = '';
-  page.message = '';
+  if (page.slotFeedback?.status === 'unknown') page.slotFeedback.message = '최신 예약 현황을 확인하고 있습니다.';
   paintReservationDay(page);
   try {
     const data = await api('/api/reservations' + (page.useServerDate ? '' : '?date=' + encodeURIComponent(page.date)));
     page.data = data;
     page.date = data.date;
     page.today = data.today;
+    page.slotFeedback = page.slotFeedback?.status === 'unknown' && page.slotFeedback.request.date === data.date
+      ? reconcileBooking(page.slotFeedback.request, data, page.slotFeedback.errorMessage) : null;
   } catch (error) {
-    page.error = error.message || '수업을 불러오지 못했습니다. 새로고침해주세요.';
+    if (page.slotFeedback?.status === 'unknown') page.slotFeedback.message = '최신 예약 현황을 확인하지 못했습니다. 다시 확인해 주세요.';
+    else page.error = error.message || '수업을 불러오지 못했습니다. 새로고침해주세요.';
   } finally {
     page.busy = false;
     paintReservationDay(page);
@@ -250,8 +312,22 @@ async function submitReservation(page, body) {
   }
 }
 
+function reconcileBooking(request, data, errorMessage = '') {
+  const slot = data.classes.find(item => item.startTime === request.startTime);
+  const waiting = slot?.myStatus === 'waiting';
+  const confirmed = slot?.myStatus === 'confirmed';
+  const applied = request.action === 'cancel' ? !waiting && !confirmed : request.action === 'change' ? confirmed : waiting || confirmed;
+  if (!applied) return { request, status: 'error', message: errorMessage || '신청 상태가 변경되었습니다. 최신 현황을 확인해 주세요.' };
+  let message;
+  if (request.action === 'cancel') message = errorMessage ? `${request.startTime} 수업의 신청 내역이 없습니다.` : `${request.startTime} 수업 신청을 취소했습니다.`;
+  else if (waiting) message = `${request.startTime} 수업 대기 ${slot.myWaitlistPosition}번입니다.`;
+  else if (request.action === 'change') message = `${request.fromStartTime}에서 ${request.startTime} 수업으로 변경되었습니다.`;
+  else message = `${request.startTime} 수업 예약이 확정되었습니다.`;
+  return { request, status: 'success', message };
+}
+
 async function changeReservation(page, button) {
-  if (page.busy || !page.data || reservationPage !== page) return;
+  if (page.busy || page.slotFeedback?.status === 'unknown' || !page.data || reservationPage !== page) return;
   const startTime = button.dataset.bookTime;
   const action = button.dataset.bookAction;
   const body = { date: page.data.date, startTime, action };
@@ -262,29 +338,29 @@ async function changeReservation(page, button) {
   if (action === 'cancel' && !confirm(`${bookingDayLabel.format(new Date(page.date + 'T12:00:00Z'))} ${startTime} 수업 신청을 취소할까요?`)) return;
   page.busy = true;
   page.error = '';
-  page.message = '예약 정보를 저장하는 중입니다.';
+  const original = page.data.classes.find(slot => slot.startTime === startTime);
+  const request = { ...body, waitlist: action === 'reserve' && original && original.confirmedCount >= original.capacity };
+  const pending = action === 'cancel' ? '취소 중…' : action === 'change' ? '시간 변경 중…' : request.waitlist ? '대기 신청 중…' : '예약 중…';
+  page.slotFeedback = { request, status: 'pending', message: `${startTime} 수업 ${pending}` };
   paintReservationDay(page);
   try {
     const data = await submitReservation(page, body);
     page.data = data;
     page.today = data.today;
-    const changed = data.classes.find(slot => slot.startTime === startTime);
-    if (action === 'cancel') page.message = `${startTime} 수업 신청을 취소했습니다.`;
-    else if (action === 'change') page.message = `${body.fromStartTime}에서 ${startTime} 수업으로 변경했습니다. 예약이 확정되었습니다.`;
-    else if (changed?.myStatus === 'waiting') page.message = `${startTime} 수업 대기 ${changed.myWaitlistPosition}번입니다.`;
-    else page.message = `${startTime} 수업 예약이 확정되었습니다.`;
+    page.slotFeedback = reconcileBooking(request, data);
   } catch (error) {
-    page.message = '';
-    page.error = error.code === 'STORE_CONFLICT'
+    const errorMessage = error.code === 'STORE_CONFLICT'
       ? '요청이 몰려 예약 변경을 저장하지 못했습니다. 현황을 확인한 뒤 다시 시도해주세요.'
-      : error.message || '요청 결과를 확인할 수 없습니다. 새로고침해주세요.';
+      : error.message || '신청이 반영되지 않았습니다.';
+    page.slotFeedback = { request, status: 'unknown', errorMessage,
+      message: '예약 결과를 확인하지 못했습니다. 최신 현황을 확인해 주세요.' };
     if (reservationPage === page && error.status !== 401) {
       try {
         page.data = await api('/api/reservations?date=' + encodeURIComponent(page.date));
         page.today = page.data.today;
+        page.slotFeedback = reconcileBooking(request, page.data, errorMessage);
       } catch {
-        page.data = null;
-        page.error += ' 최신 현황을 보려면 새로고침해주세요.';
+        // Retain the original card so the member can safely check the result with a read.
       }
     }
   } finally {
@@ -300,7 +376,12 @@ function mountReservations(date) {
   if (!host) return;
   const today = bookingKoreaDate.format(new Date());
   const hasDate = validBookingDate(date);
-  const page = { host, date: hasDate ? date : today, today, useServerDate: !hasDate, data: null, busy: false, error: '', message: '' };
+  const page = { host, date: hasDate ? date : today, today, useServerDate: !hasDate, data: null, busy: false, error: '', slotFeedback: null };
+  const rules = host.parentElement.querySelector('.booking-rules');
+  page.rulesLayout = window.matchMedia('(min-width: 851px)');
+  page.onRulesLayout = () => { rules.open = page.rulesLayout.matches; };
+  page.onRulesLayout();
+  page.rulesLayout.addEventListener('change', page.onRulesLayout);
   if (session.isAdmin) page.coachHost = document.querySelector('#coach-schedule');
   reservationPage = page;
   host.onchange = event => {
@@ -309,7 +390,7 @@ function mountReservations(date) {
   host.onclick = event => {
     const action = event.target.closest('[data-book-action]');
     if (action) return changeReservation(page, action);
-    if (event.target.closest('[data-book-refresh]')) return loadReservationDay(page);
+    if (event.target.closest('[data-book-refresh], [data-book-verify]')) return loadReservationDay(page);
   };
   page.onVisible = () => { if (!document.hidden) loadReservationDay(page); };
   document.addEventListener('visibilitychange', page.onVisible);

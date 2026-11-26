@@ -82,31 +82,88 @@ function guideResultGroups(entries) {
   }).join('');
 }
 
+const guideListVisits = new Map();
+let lastGuideList = null;
+let stopTrackingGuideList = null;
+
 function mountGuide() {
   const page = document.querySelector('#guide-page');
   if (!page) return;
   const all = guideEntries();
   const query = page.querySelector('#guide-query');
   const filters = page.querySelectorAll('[data-guide-filter]');
-  let category = 'all';
+  const owner = session.id;
+  if (lastGuideList && lastGuideList.owner !== owner) {
+    guideListVisits.clear();
+    lastGuideList = null;
+  }
+  const stored = history.state?.guideList;
+  const previous = stored?.owner === owner ? guideListVisits.get(stored.key) || stored : lastGuideList;
+  const visit = {
+    owner, key: stored?.owner === owner ? stored.key : crypto.getRandomValues(new Uint32Array(2)).join('-'),
+    category: previous?.category || 'all', query: previous?.query || '',
+    scrollY: previous?.scrollY || 0, entry: previous?.entry || ''
+  };
+  // Older entries can restore their serialized History snapshot after leaving this cache.
+  guideListVisits.delete(visit.key);
+  guideListVisits.set(visit.key, visit);
+  if (guideListVisits.size > 50) guideListVisits.delete(guideListVisits.keys().next().value);
+  lastGuideList = visit;
+  query.value = visit.query;
+  const hash = location.hash;
+  function rememberScroll() {
+    if (location.hash === hash) visit.scrollY = window.scrollY;
+  }
+  function saveEntry() {
+    if (location.hash === hash) {
+      rememberScroll();
+      history.replaceState({ ...history.state, guideList: visit }, '');
+    }
+  }
+  function saveBeforeLink(event) {
+    if (event.target.closest('a[href]')) saveEntry();
+  }
   function update() {
-    const results = all.filter(item => (category === 'all' || category === item.category) && guideSearchMatches(item, query.value));
+    const results = all.filter(item => (visit.category === 'all' || visit.category === item.category) && guideSearchMatches(item, visit.query));
     page.querySelector('[data-guide-results]').innerHTML = guideResultGroups(results);
     page.querySelector('[data-guide-count]').textContent = `검색 결과 ${results.length}개`;
-    for (const filter of filters) filter.setAttribute('aria-pressed', String(filter.dataset.guideFilter === category));
+    for (const filter of filters) filter.setAttribute('aria-pressed', String(filter.dataset.guideFilter === visit.category));
   }
   page.onclick = event => {
     const filter = event.target.closest('[data-guide-filter]');
     if (filter) {
-      category = filter.dataset.guideFilter;
+      visit.category = filter.dataset.guideFilter;
+      visit.entry = '';
       update();
       return;
     }
     const opener = event.target.closest('[data-guide-entry]');
-    if (opener) openGuideEntry(opener.dataset.guideEntry, opener);
+    if (opener) {
+      visit.entry = opener.dataset.guideEntry;
+      rememberScroll();
+      openGuideEntry(visit.entry, opener);
+    }
   };
-  query.oninput = update;
+  query.oninput = () => {
+    visit.query = query.value;
+    visit.entry = '';
+    update();
+  };
   update();
+  window.scrollTo(0, visit.scrollY);
+  if (visit.entry) {
+    const row = [...page.querySelectorAll('[data-guide-entry]')].find(node => node.dataset.guideEntry === visit.entry);
+    row?.focus({ preventScroll: true });
+  }
+  saveEntry();
+  window.addEventListener('scroll', rememberScroll, { passive: true });
+  window.addEventListener('pagehide', saveEntry);
+  document.addEventListener('click', saveBeforeLink, true);
+  stopTrackingGuideList = () => {
+    window.removeEventListener('scroll', rememberScroll);
+    window.removeEventListener('pagehide', saveEntry);
+    document.removeEventListener('click', saveBeforeLink, true);
+  };
 }
 
 function guideVideoButton(id) {
@@ -175,6 +232,12 @@ function removeGuideDialog(dialog) {
 }
 
 function cleanupGuide() {
+  if (stopTrackingGuideList) stopTrackingGuideList();
+  stopTrackingGuideList = null;
+  if (!session) {
+    guideListVisits.clear();
+    lastGuideList = null;
+  }
   const dialog = document.querySelector('.guide-dialog');
   if (dialog) removeGuideDialog(dialog);
 }
@@ -183,7 +246,8 @@ function openGuideEntry(id, opener) {
   const entry = guideEntries().find(item => item.id === id);
   const host = document.querySelector('#app');
   if (!entry || !host) return;
-  cleanupGuide();
+  const previous = document.querySelector('.guide-dialog');
+  if (previous) removeGuideDialog(previous);
   const dialog = document.createElement('dialog');
   dialog.className = 'guide-dialog';
   dialog.setAttribute('aria-labelledby', 'guide-detail-title');

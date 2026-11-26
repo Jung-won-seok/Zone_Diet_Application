@@ -30,7 +30,7 @@ class FormValues {
 }
 function deferred() { let resolve; const promise=new Promise(done=>{resolve=done;});return {promise,resolve}; }
 function fixture(hash = '#record/2026-11-10', {isAdmin = false, zondaParticipant = true, pendingApproval = false} = {}) {
-  const listeners={}, nodes=new Map(), links=[], prompts=[], messages=[], calls=[];
+  const listeners={}, nodes=new Map(), links=[], localLinks=[], prompts=[], messages=[], calls=[];
   const flags={meal:false,naver:false,admin:false,boxMember:false,wod:false,answer:false};
   const location={hash,pathname:'/',search:''};
   const user = {id: isAdmin ? 'admin' : 'u01', name: '김민준', isAdmin, pendingApproval};
@@ -42,7 +42,14 @@ function fixture(hash = '#record/2026-11-10', {isAdmin = false, zondaParticipant
   nodes.set('.topbar > span:first-child',{firstChild:{textContent:''}});
   const boxReturn = new Element({...boxReturnAttributes});
   nodes.set('.box-return', boxReturn);
-  Object.defineProperty(nav,'innerHTML',{set(html){links.length=0;for(const [,attrs]of html.matchAll(/<a\s+([^>]*)>/g))links.push(new Element(attributes(attrs)));}});
+  const subnav = new Element();
+  nodes.set('.zonda-subnav', subnav);
+  for (const [menu, anchors] of [[nav, links], [subnav, localLinks]]) {
+    Object.defineProperty(menu, 'innerHTML', {set(html) {
+      anchors.length = 0;
+      for (const [,attrs] of html.matchAll(/<a\s+([^>]*)>/g)) anchors.push(new Element(attributes(attrs)));
+    }});
+  }
   Object.defineProperty(profile,'innerHTML',{set(){nodes.set('#logout-button',new Element());}});
   Object.defineProperty(app,'innerHTML',{set(html){
     app.markup = html;
@@ -63,8 +70,8 @@ function fixture(hash = '#record/2026-11-10', {isAdmin = false, zondaParticipant
   const navState={cancelled:0,synced:[]};
   const ctx=vm.createContext({
     Date,JSON,FormData:FormValues,location,
-    history:{replaceState(_state,_title,url){location.hash=url.includes('#')?url.slice(url.indexOf('#')):'';}},
-    document:{body,querySelector:selector=>selector==='#record-form, #settings-form'?form:nodes.get(selector)||null,querySelectorAll:selector=>selector==='[data-page]'?[...links,settings]:[]},
+    history:{state:null,replaceState(state,_title,url){this.state=state;location.hash=url.includes('#')?url.slice(url.indexOf('#')):'';}},
+    document:{body,querySelector:selector=>selector==='#record-form, #settings-form'?form:nodes.get(selector)||null,querySelectorAll:selector=>selector==='[data-page]'?[...links,...localLinks,settings]:[]},
     window:{addEventListener:(name,fn)=>{listeners[name]=fn;},scrollTo(){}},
     MobileNavigation:{create(options){navState.options=options;return{cancel(){navState.cancelled++;},sync(){navState.synced.push(links.find(e=>e.classList.contains('active'))?.dataset.page||'settings');}};}},
     fetch:async(url,options)=>{if(initial){initial=false;return new Promise(()=>{});}calls.push({url,options});const result=await response(url,options);return {ok:true,json:async()=>result};},
@@ -88,7 +95,7 @@ function fixture(hash = '#record/2026-11-10', {isAdmin = false, zondaParticipant
   vm.runInContext(source,ctx);
   ctx.messages=messages;ctx.testAccount=account;
   vm.runInContext("toast=message=>messages.push(message); authReady=true; bootstrap=testAccount; session=bootstrap.user; state=bootstrap.personal; render();",ctx);
-  return {ctx,location,flags,prompts,messages,calls,navState,nodes,body,account,boxReturn,
+  return {ctx,location,flags,prompts,messages,calls,navState,nodes,body,account,boxReturn,links,localLinks,subnav,
     get pages(){return links.map(link=>link.dataset.page);},
     get markup(){return app.markup;},
     get form(){return form;},get active(){return links.find(e=>e.classList.contains('active'))?.dataset.page||'settings';},
@@ -99,6 +106,18 @@ function fixture(hash = '#record/2026-11-10', {isAdmin = false, zondaParticipant
     unload(){const event={preventDefault(){this.prevented=true;}};listeners.beforeunload(event);return event;}
   };
 }
+
+test('returning to the guide after discarding WOD edits preserves the destination history entry', async () => {
+  const f = fixture('#wod/2026-11-10');
+  const destinationState = { guide: { query: 'Fran' } };
+  f.ctx.history.state = destinationState;
+  f.flags.wod = true;
+  f.flags.answer = true;
+  await f.navigate('#guide');
+  assert.equal(f.location.hash, '#guide');
+  assert.equal(f.ctx.history.state, destinationState);
+  assert.equal(f.navState.guideMounted, true);
+});
 
 test('declining dirty personal navigation restores URL, active menu and edited form',async()=>{
   const f=fixture();f.field('weight').value='71.5';const form=f.form;
@@ -178,6 +197,8 @@ test('box-only members can open Zonda information and gain access after enrollme
   assert.equal(f.body.classList.contains('in-box'), true);
   await f.navigate('#zonda');
   assert.equal(f.active, 'zonda');
+  assert.equal(f.subnav.hidden, true);
+  assert.equal(f.localLinks.length, 0);
   assert.equal(f.boxReturn.hidden, false);
   assert.equal(f.boxReturn.getAttribute('href'), '#guide');
   await f.navigate(f.boxReturn.getAttribute('href'));
@@ -214,11 +235,41 @@ test('administrators manage the box and Zonda separately; unapproved applicants 
   assert.equal(f.active, 'members');
   const pending = fixture('#reservations', {zondaParticipant: false, pendingApproval: true});
   assert.deepEqual(pending.pages, ['connect']);
+  assert.equal(pending.subnav.hidden, true);
+  assert.equal(pending.localLinks.length, 0);
   assert.equal(pending.active, 'connect');
   assert.equal(pending.boxReturn.hidden, true);
   await pending.navigate('#guide');
   assert.equal(pending.active, 'connect');
   assert.equal(pending.navState.guideMounted, undefined);
+});
+
+test('mobile Zonda retains the box destinations and highlights both the section and its role-specific page', async () => {
+  for (const isAdmin of [false, true]) {
+    const f = fixture('#reservations/2027-01-04', {isAdmin});
+    const boxPages = f.pages;
+    await f.navigate('#zonda');
+    const mobileLinks = f.links.filter(link => link.getAttribute('class') === 'mobile-box-link');
+    assert.deepEqual(mobileLinks.map(link => link.dataset.page), boxPages);
+    assert.equal(mobileLinks[0].getAttribute('href'), '#reservations/2027-01-04');
+    assert.equal(mobileLinks.find(link => link.dataset.page === 'zonda').getAttribute('aria-current'), 'location');
+    const programPages = isAdmin ? ['admin','accounts','naver','board'] : ['today','team','board','record','progress','settings'];
+    assert.equal(f.subnav.hidden, false);
+    assert.deepEqual(f.localLinks.map(link => link.dataset.page), programPages);
+    for (const page of programPages) {
+      await f.navigate('#' + page);
+      assert.equal(f.localLinks.find(link => link.dataset.page === page).getAttribute('aria-current'), 'page');
+      assert.equal(f.links.find(link => link.dataset.page === 'zonda').getAttribute('aria-current'), 'location');
+    }
+    if (!isAdmin) {
+      await f.navigate('#connect');
+      assert.equal(f.localLinks.find(link => link.dataset.page === 'settings').getAttribute('aria-current'), 'location');
+    }
+    await f.navigate(f.boxReturn.getAttribute('href'));
+    assert.equal(f.location.hash, '#reservations/2027-01-04');
+    assert.equal(f.subnav.hidden, true);
+    assert.equal(f.localLinks.length, 0);
+  }
 });
 
 test('a direct Zonda link returns to the box landing and respects unsaved program records', async () => {

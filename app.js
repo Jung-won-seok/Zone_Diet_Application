@@ -114,21 +114,41 @@ function renderShell(page) {
     const boxHash = '#' + page;
     boxReturn.setAttribute('href', location.hash.split('/')[0] === boxHash ? location.hash : boxHash);
   }
-  let routes;
-  if (inBox) {
-    routes = [['reservations','수업 예약','수업 예약'],['wod','오늘의 와드','와드'],['guide','크로스핏 가이드','가이드']];
-    if (session.isAdmin) routes.push(['members','박스 회원 관리','회원 관리']);
-    routes.push(['zonda','존다 프로그램','존다']);
+  const inProgram = !inBox && !session.pendingApproval;
+  const boxRoutes = [['reservations','수업 예약','수업 예약'],['wod','오늘의 와드','와드'],['guide','크로스핏 가이드','가이드']];
+  if (session.isAdmin) boxRoutes.push(['members','박스 회원 관리','회원 관리']);
+  boxRoutes.push(['zonda','존다 프로그램','존다']);
+  const programRoutes = session.isAdmin ? adminProgramRoutes : memberProgramRoutes;
+  const lastBoxHref = boxReturn.getAttribute('href');
+  const sidebarLinks = (routes, cssClass = '') => routes.map(([id,label,shortLabel]) => {
+    const href = inProgram && lastBoxHref.startsWith('#' + id + '/') ? lastBoxHref : '#' + id;
+    return `<a href="${escapeHTML(href)}" data-page="${id}" class="${cssClass}" aria-label="${label}" draggable="false">${navLabel(id,label,shortLabel)}</a>`;
+  }).join('');
+  const nav = document.querySelector('.sidebar nav');
+  if (inProgram) {
+    nav.innerHTML = sidebarLinks(programRoutes, 'desktop-program-link') + sidebarLinks(boxRoutes, 'mobile-box-link');
   } else {
-    routes = session.pendingApproval ? [['connect','카페 연동 신청','카페 연동']] : session.isAdmin ? adminProgramRoutes : memberProgramRoutes;
+    nav.innerHTML = sidebarLinks(session.pendingApproval ? [['connect','카페 연동 신청','카페 연동']] : boxRoutes);
   }
-  document.querySelector('.sidebar nav').innerHTML = routes.map(([id,label,mobileLabel]) => `<a href="#${id}" data-page="${id}" aria-label="${label}" draggable="false">${navLabel(id,label,mobileLabel)}</a>`).join('');
+  const localNav = document.querySelector('.zonda-subnav');
+  localNav.hidden = !inProgram;
+  const sectionRoutes = session.isAdmin ? programRoutes : [...programRoutes, ['settings','프로그램 설정','설정']];
+  localNav.innerHTML = inProgram ? sectionRoutes.map(([id,label,shortLabel]) =>
+    `<a href="#${id}" data-page="${id}" aria-label="${label}">${shortLabel}</a>`
+  ).join('') : '';
   const settingsLink = document.querySelector('.settings-link');
   settingsLink.innerHTML = navLabel('settings','프로그램 설정','설정');
   settingsLink.setAttribute('aria-label','프로그램 설정');
   settingsLink.setAttribute('draggable','false');
   document.querySelector('.program-label').textContent = inBox ? '박스 메뉴' : session.pendingApproval ? '카페 연결 준비' : bootstrap.program.name;
   document.querySelector('.settings-link').style.display = inBox || session.isAdmin || session.pendingApproval ? 'none' : '';
+  document.querySelectorAll('[data-page]').forEach(node => {
+    const current = node.dataset.page === page;
+    const section = inProgram && (node.dataset.page === 'zonda' || (page === 'connect' && node.dataset.page === 'settings'));
+    node.classList.toggle('active', current || section);
+    if (current || section) node.setAttribute('aria-current', current ? 'page' : 'location');
+    else node.removeAttribute('aria-current');
+  });
   document.querySelector('.profile').innerHTML = `<span class="avatar">${session.isAdmin ? 'AD' : escapeHTML(session.name.slice(-2))}</span><span>${escapeHTML(session.name)}</span><button id="logout-button" type="button">로그아웃</button>`;
   document.querySelector('#logout-button').addEventListener('click', async () => {
     if (navigationPending || personalSaving) return;
@@ -222,7 +242,6 @@ function render() {
   loginRoot.innerHTML = ''; renderShell(page);
   document.querySelector('#page-label').textContent = labels[page];
   document.querySelector('.topbar > span:first-child').firstChild.textContent = session.isAdmin ? '관리자 ' : '레벤 ';
-  document.querySelectorAll('[data-page]').forEach(node => { node.classList.toggle('active', node.dataset.page === page); if (node.dataset.page === page) node.setAttribute('aria-current','page'); else node.removeAttribute('aria-current'); });
   mobileNavigation.sync();
   const validDate = date && /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(`${date}T12:00:00`)) && date <= todayKey();
   const views = {reservations:reservationsView, wod:wodView, guide:guideView, members:boxMembersView,
@@ -257,11 +276,12 @@ function render() {
     if(await save({...state,settings:Object.fromEntries(['name','startWeight','goalWeight'].map(k=>[k,String(data.get(k)||'').trim()]))})) { personalSaved = submittedSignature; toast('설정을 저장했어요.'); } button.disabled = false; personalSaving = false;
   });
   personalSaved = personalFormSignature();
-  window.scrollTo(0,0);
+  if (page !== 'guide') window.scrollTo(0,0);
 }
 window.addEventListener('hashchange', async () => {
   const nextHash = location.hash;
   if (nextHash === renderedHash) return;
+  const destinationState = history.state;
   const restoreHash = () => history.replaceState(null, '', `${location.pathname}${location.search}${renderedHash}`);
   if (navigationPending) { restoreHash(); return; }
   navigationPending = true;
@@ -287,7 +307,7 @@ window.addEventListener('hashchange', async () => {
         if (!confirm('저장하지 않은 팀 편성 변경을 버리고 이동할까요?')) return;
         resetAdminDraft();
       }
-      history.replaceState(null, '', `${location.pathname}${location.search}${nextHash}`);
+      history.replaceState(destinationState, '', `${location.pathname}${location.search}${nextHash}`);
     }
     if (nextHash === '#zonda' && session && !session.pendingApproval) {
       try { await loadBootstrap(); }

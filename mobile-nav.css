@@ -24,7 +24,9 @@
 .box-return:hover { background: #edf3e8; }
 .topbar:has(.box-return:not([hidden])) .profile { margin-left: auto; }
 .sidebar .nav-mobile-label,
-.sidebar .mobile-nav-indicator {
+.sidebar .mobile-nav-indicator,
+.sidebar nav a.mobile-box-link,
+.zonda-subnav {
   display: none;
 }
 
@@ -91,11 +93,39 @@
     flex: 1 1 0;
   }
 
-  body.in-box .sidebar nav {
+  body.in-box .sidebar nav,
+  body.in-zonda .sidebar nav {
     display: flex;
     flex: 1 1 0;
   }
-  body.in-box .sidebar nav a { flex: 1 1 0; }
+  body.in-box .sidebar nav a, body.in-zonda .sidebar nav a.mobile-box-link { flex: 1 1 0; }
+  body.in-zonda .sidebar nav a.desktop-program-link, body.in-zonda .sidebar .settings-link { display: none; }
+  body.in-zonda .sidebar nav a.mobile-box-link { display: flex; }
+
+  .in-zonda:not(.logged-out) .zonda-subnav:not([hidden]) {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 3px;
+    margin-top: 12px;
+    padding: 4px;
+    background: var(--white);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+  }
+  .is-admin.in-zonda .zonda-subnav:not([hidden]) { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .zonda-subnav a {
+    display: grid;
+    place-items: center;
+    min-height: 44px;
+    padding: 4px;
+    border-radius: 11px;
+    color: var(--muted);
+    text-align: center;
+    font-size: 13px;
+    font-weight: 650;
+  }
+  .zonda-subnav a[aria-current] { background: var(--graphite); color: var(--white); }
+  .zonda-subnav a:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; }
 
   body .sidebar nav a,
   body .sidebar .settings-link {
