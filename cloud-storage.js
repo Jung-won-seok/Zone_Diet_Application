@@ -1,17 +1,32 @@
 const { get, put, del, BlobPreconditionFailedError } = require('@vercel/blob');
 const { seedStore, ApiError } = require('./server');
+const { getStoreMode } = require('./storage-mode');
 const STORE_PATH = 'app/store-v1.json';
 
-// Each request reads a fresh snapshot. ETag checks make metadata commits atomic
-// across Vercel instances; a conflicting request must reload before retrying.
-async function createCloudContext() {
+function blobOptions() {
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   if (!token) throw new ApiError(503, '온라인 저장소가 연결되지 않았습니다. 관리자에게 문의해주세요.');
-  const options = { access: 'private', token };
-  // Keep the storage ETag strong: compressed GET responses may use a weak ETag,
-  // which cannot be used for the next conditional write.
-  const read = pathname => get(pathname, { ...options, useCache: false, headers: { 'accept-encoding': 'identity' } });
-  let result = await read(STORE_PATH);
+  return { access: 'private', token };
+}
+
+function readSnapshot(options) {
+  // Request an uncompressed representation to preserve the strong ETag for conditional writes.
+  return get(STORE_PATH, { ...options, useCache: false, headers: { 'accept-encoding': 'identity' } });
+}
+
+async function parseSnapshot(result) {
+  if (!result?.stream) throw new ApiError(503, '저장된 정보를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
+  const store = await new Response(result.stream).json();
+  if (store?.version !== 1 || !Array.isArray(store.users)) throw new ApiError(503, '저장 데이터 형식을 확인해야 합니다.');
+  return store;
+}
+
+async function readLegacyBlobStore() {
+  return parseSnapshot(await readSnapshot(blobOptions()));
+}
+
+async function createBlobContext(options) {
+  let result = await readSnapshot(options);
   if (!result) {
     let passwords;
     try { passwords = JSON.parse(process.env.INITIAL_ACCOUNT_PASSWORDS || 'null'); } catch {}
@@ -24,15 +39,13 @@ async function createCloudContext() {
     try {
       await put(STORE_PATH, JSON.stringify(seedStore(passwords, { demoMembers })), { ...options, contentType: 'application/json', addRandomSuffix: false, allowOverwrite: false, cacheControlMaxAge: 60 });
     } catch (error) {
-      result = await read(STORE_PATH);
+      result = await readSnapshot(options);
       if (!result) throw error;
     }
-    if (!result) result = await read(STORE_PATH);
+    if (!result) result = await readSnapshot(options);
   }
-  if (!result?.stream) throw new ApiError(503, '저장된 정보를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
+  const initialStore = await parseSnapshot(result);
   let etag = result.blob.etag;
-  const initialStore = await new Response(result.stream).json();
-  if (initialStore.version !== 1 || !Array.isArray(initialStore.users)) throw new ApiError(503, '저장 데이터 형식을 확인해야 합니다.');
   return {
     initialStore,
     async persistStore(next) {
@@ -48,15 +61,27 @@ async function createCloudContext() {
         throw error;
       }
     },
-    mediaStorage: {
-      async write(id, buffer, mime) { await put(`media/${id}`, buffer, { ...options, contentType: mime, addRandomSuffix: false, allowOverwrite: false }); },
-      async read(id) {
-        const image = await get(`media/${id}`, options);
-        if (!image?.stream) throw new ApiError(404, '사진을 찾을 수 없습니다.');
-        return Buffer.from(await new Response(image.stream).arrayBuffer());
-      },
-      async remove(id) { await del(`media/${id}`, { token }); },
-    },
   };
 }
-module.exports = { createCloudContext };
+
+function blobMediaStorage(options) {
+  return {
+    async write(id, buffer, mime) { await put(`media/${id}`, buffer, { ...options, contentType: mime, addRandomSuffix: false, allowOverwrite: false }); },
+    async read(id) {
+      const image = await get(`media/${id}`, options);
+      if (!image?.stream) throw new ApiError(404, '사진을 찾을 수 없습니다.');
+      return Buffer.from(await new Response(image.stream).arrayBuffer());
+    },
+    async remove(id) { await del(`media/${id}`, { token: options.token }); },
+  };
+}
+
+async function createCloudContext(request = {}) {
+  const mode = getStoreMode();
+  const options = blobOptions();
+  const context = mode === 'postgres'
+    ? await require('./db/store').createPostgresContext(require('./db/pool').getPool(), request)
+    : await createBlobContext(options);
+  return { ...context, mediaStorage: blobMediaStorage(options) };
+}
+module.exports = { createCloudContext, readLegacyBlobStore };

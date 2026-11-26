@@ -150,8 +150,18 @@
   .wod-stack > .wod-sheet, .wod-stack > .wod-prior { grid-column: auto; }
 }
 
+@media (max-width: 850px) {
+  .booking-dashboard > .wod-preview { padding: 0; gap: 0; }
+  .booking-dashboard > .wod-preview > div { display: none; }
+  .booking-dashboard > .wod-preview > a {
+    width: 100%;
+    padding: 10px 16px;
+    border-radius: inherit;
+    background: transparent;
+    color: var(--green);
+  }
+}
 @media (max-width: 580px) {
-  .wod-preview { padding: 18px; gap: 12px; }
   .wod-toolbar { padding: 10px 12px; }
   .wod-field-grid { grid-template-columns: 1fr; }
   .wod-toolbar label { flex-wrap: wrap; }

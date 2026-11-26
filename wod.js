@@ -43,7 +43,7 @@ async function mountWodPreview(date) {
   (utilities || schedule).before(preview);
   const link = document.createElement('a');
   link.href = validBookingDate(date) ? '#wod/' + date : '#wod';
-  link.textContent = '와드 보기 →';
+  link.textContent = validBookingDate(date) ? '선택한 날의 와드 보기 →' : '오늘의 와드 보기 →';
   preview.append(link);
   try {
     const day = await api(wodUrl(date));
@@ -69,7 +69,7 @@ async function mountWodPreview(date) {
     }
     preview.prepend(info);
     link.href = '#wod/' + day.date;
-    link.textContent = !day.wod && session.isAdmin ? '와드 등록 →' : '와드 보기 →';
+    link.textContent = heading.textContent + (!day.wod && session.isAdmin ? ' 등록 →' : ' 보기 →');
   } catch {
     if (preview.isConnected) preview.prepend('와드를 불러오지 못했습니다.');
   }

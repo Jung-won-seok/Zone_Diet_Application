@@ -16,6 +16,21 @@ function guideContext(extra = {}) {
   return context;
 }
 
+function guideBrowser() {
+  const listeners = new Map();
+  const window = {
+    scrollY: 0,
+    scrollTo(_x, y) { this.scrollY = y; },
+    addEventListener: (type, handler) => listeners.set(type, handler),
+    removeEventListener: type => listeners.delete(type)
+  };
+  const history = { state: null, replaceState(state) { this.state = structuredClone(state); } };
+  return {
+    session: { id: 'demo-member' }, location: { hash: '#guide' }, window, history,
+    crypto: require('node:crypto').webcrypto, listeners
+  };
+}
+
 test('guide searches across categories, combines filters with aliases and can recover an empty result', () => {
   const filters = ['all', 'movement', 'benchmark', 'term'].map(category => ({
     dataset: { guideFilter: category },
@@ -27,7 +42,7 @@ test('guide searches across categories, combines filters with aliases and can re
     querySelectorAll: () => filters,
     querySelector: selector => ({ '#guide-query': search, '[data-guide-results]': results, '[data-guide-count]': count })[selector]
   };
-  const ui = guideContext({ document: { querySelector: () => page } });
+  const ui = guideContext({ ...guideBrowser(), document: { querySelector: () => page, addEventListener() {} } });
   ui.mountGuide();
   assert.equal(filters[0]['aria-pressed'], 'true');
   search.value = 't2b';
@@ -47,6 +62,68 @@ test('guide searches across categories, combines filters with aliases and can re
   search.oninput();
   assert.match(results.innerHTML, /data-guide-entry="cindy"/);
   assert.doesNotMatch(results.innerHTML, /data-guide-entry="toes-to-bar"/);
+});
+
+test('guide restores the originating search, category, position and result across history and tab visits', () => {
+  const browser = guideBrowser();
+  const search = {}, results = {}, count = {};
+  const filters = ['all', 'movement', 'benchmark', 'term'].map(guideFilter => ({
+    dataset: { guideFilter }, setAttribute(_key, value) { this.pressed = value; },
+    closest: () => filters.find(node => node.dataset.guideFilter === guideFilter)
+  }));
+  let focused = '', opened = '', linked;
+  const fran = {
+    dataset: { guideEntry: 'fran' },
+    closest(selector) { return selector === '[data-guide-entry]' ? this : null; },
+    focus({ preventScroll }) { assert.equal(preventScroll, true); focused = 'fran'; }
+  };
+  const page = {
+    querySelectorAll: selector => selector === '[data-guide-filter]' ? filters : [fran],
+    querySelector: key => ({ '#guide-query': search, '[data-guide-results]': results, '[data-guide-count]': count })[key]
+  };
+  const document = {
+    querySelector: key => key === '#guide-page' ? page : null,
+    addEventListener(_name, fn) { linked = fn; }, removeEventListener() { linked = null; }
+  };
+  const ui = guideContext({ ...browser, document });
+  ui.openGuideEntry = id => { opened = id; };
+  ui.mountGuide();
+  assert.equal(browser.window.scrollY, 0);
+  page.onclick({ target: filters[2] });
+  search.value = 'Fran'; search.oninput();
+  browser.window.scrollY = 240;
+  page.onclick({ target: fran });
+  assert.equal(opened, 'fran');
+  linked({ target: { closest: () => ({ href: '#wod/2026-11-20' }) } });
+  const original = browser.history.state;
+  browser.location.hash = '#wod/2026-11-20';
+  ui.cleanupGuide();
+  assert.equal(linked, null);
+
+  // Opening the Guide tab creates a new history entry with the last guide view.
+  browser.history.state = null;
+  browser.window.scrollY = 0;
+  browser.location.hash = '#guide';
+  ui.mountGuide();
+  assert.equal(search.value, 'Fran');
+  assert.equal(filters[2].pressed, 'true');
+  assert.equal(focused, 'fran');
+  assert.equal(browser.window.scrollY, 240);
+  search.value = 'Cindy'; search.oninput();
+  ui.cleanupGuide();
+
+  // Native Back returns to Fran even though another guide visit changed its query.
+  browser.history.state = original;
+  ui.mountGuide();
+  assert.equal(search.value, 'Fran');
+  assert.match(results.innerHTML, /data-guide-entry="fran"/);
+  assert.equal(browser.window.scrollY, 240);
+  ui.cleanupGuide();
+  browser.session.id = 'different-member';
+  ui.mountGuide();
+  assert.equal(search.value, '');
+  assert.equal(filters[0].pressed, 'true');
+  assert.equal(browser.window.scrollY, 0);
 });
 
 test('머슬업 검색은 두 기구를 보여주고 와드의 기구별 표기는 각각 해당 동작을 연다', () => {
