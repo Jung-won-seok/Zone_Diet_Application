@@ -39,7 +39,9 @@ function fixture() {
     button.dataset.cameraView = view;
     return button;
   });
-  controls.get('camera').querySelectorAll = () => presets;
+  const zoomScale = new Control();
+  controls.get('camera').querySelector = selector => selector === '[data-camera-scale]' ? zoomScale : null;
+  controls.get('camera').querySelectorAll = selector => selector === '[data-camera-view]' ? presets : [];
   const root = {
     querySelector(selector) { return controls.get(selector.replace(/^\[data-motion-(.+)\]$/, '$1')); },
     querySelectorAll(selector) { return selector === '[data-motion-mode]' ? modes : steps; }
@@ -89,6 +91,7 @@ function fixture() {
   return {
     player, ui, document, frames, steps, controls, draws, draws3D, muscleUpdates, modes, presets, disconnected: () => disconnected,
     el: key => controls.get(key),
+    elapse(ms) { now += ms; },
     tick(ms) {
       now += ms;
       const callbacks = Array.from(frames.values());
@@ -142,7 +145,7 @@ test('2D·3D 전환과 카메라 회전은 현재 시각과 근육 표시를 유
   assert.equal(f.el('camera').hidden, true);
 });
 
-test('반속 재생과 끝에서 다시 재생, 탭 이탈과 정리가 일관되게 적용된다', () => {
+test('반속에서도 남은 시간을 다음 반복에 넘기고 일시정지한 위치에서 재개한다', () => {
   const f = fixture();
   f.el('play').fire('click');
   f.tick(500);
@@ -150,20 +153,50 @@ test('반속 재생과 끝에서 다시 재생, 탭 이탈과 정리가 일관�
   assert.equal(f.el('rate').textContent, '0.5×');
   f.tick(1000);
   assert.equal(f.draws.at(-1), 1);
-  f.tick(5000);
-  assert.equal(f.draws.at(-1), 2);
-  assert.equal(f.el('play-label').textContent, '다시 재생');
+  f.tick(10500);
+  assert.equal(f.draws.at(-1), 0.25);
+  assert.equal(f.el('play-label').textContent, '일시정지');
+  assert.equal(f.frames.size, 1);
+  f.elapse(100);
+  f.el('play').fire('click');
+  assert.equal(f.draws.at(-1), 0.3);
+  assert.equal(f.el('play-label').textContent, '재생');
   assert.equal(f.frames.size, 0);
+  f.elapse(4000);
+  f.el('play').fire('click');
+  f.tick(200);
+  assert.equal(f.draws.at(-1), 0.4);
+  f.steps.at(-1).fire('click');
+  assert.equal(f.draws.at(-1), motion.duration);
+  assert.equal(f.el('play-label').textContent, '다시 재생');
   f.el('play').fire('click');
   assert.equal(f.draws.at(-1), 0);
+  f.tick(4000);
+  assert.equal(f.draws.at(-1), 0);
+  assert.equal(f.frames.size, 1);
+});
+
+test('탭이 숨겨진 동안은 그리지 않고 복귀하면 반복 재생을 이어 간다', () => {
+  const f = fixture();
+  f.el('play').fire('click');
   f.tick(200);
+  f.elapse(50);
   f.document.hidden = true;
   f.document.fire('visibilitychange');
   assert.equal(f.frames.size, 0);
-  assert.equal(f.draws.at(-1), 0.1);
+  const hiddenCount = f.draws.length;
+  f.tick(4100);
+  assert.equal(f.draws.length, hiddenCount);
   f.document.hidden = false;
-  f.el('play').fire('click');
+  f.document.fire('visibilitychange');
+  assert.equal(f.frames.size, 1);
+  f.tick(250);
+  assert.equal(f.draws.at(-1), 0.5);
+  f.document.hidden = true;
+  f.document.fire('visibilitychange');
   f.player.pause();
+  f.document.hidden = false;
+  f.document.fire('visibilitychange');
   assert.equal(f.frames.size, 0);
   f.el('play').fire('click');
   f.player.dispose();

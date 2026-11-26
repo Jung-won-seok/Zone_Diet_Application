@@ -67,19 +67,22 @@ test('ring muscle-up keeps each moving hand on its own closed ring and each stra
   }
 });
 
-test('3D rotation, time and muscle emphasis each change the rendered pixels', () => {
-  let pixels;
+function makeCanvas() {
   const context = {
     createImageData(width, height) { return { data: new Uint8ClampedArray(width * height * 4) }; },
-    putImageData(image) { pixels = image.data; },
+    putImageData(image) { this.pixels = image.data; },
   };
-  const canvas = { clientWidth: 160, getContext: () => context };
+  return { clientWidth: 160, getContext: () => context };
+}
+
+test('3D rotation, time and muscle emphasis each change the rendered pixels', () => {
+  const canvas = makeCanvas();
   const motion = scene.getMovementMotion('thruster');
   function render(seconds, yaw, highlight = true) {
     const { pose, phaseIndex } = scene.sampleMovementPose(motion, seconds);
     const regions = highlight ? scene.getMovementMuscles(motion.id, phaseIndex) : [];
     assert.ok(draw(canvas, motion, pose, regions, { yaw, pitch: 0.09 }));
-    return createHash('sha256').update(pixels).digest('hex');
+    return createHash('sha256').update(canvas.getContext().pixels).digest('hex');
   }
   const start = render(0, 0.48);
   assert.notEqual(render(motion.duration, 0.48), start);
@@ -87,4 +90,44 @@ test('3D rotation, time and muscle emphasis each change the rendered pixels', ()
   const views = [render(0, 0), render(0, Math.PI / 2), render(0, -Math.PI / 2), start];
   assert.equal(new Set(views).size, 4);
   assert.equal(render(0, 0.48), start);
+});
+
+test('3D zoom scales the current pose about the canvas center and updates the floor', () => {
+  const canvas = makeCanvas();
+  const motion = scene.getMovementMotion('air-squat');
+  const { pose } = scene.sampleMovementPose(motion, 0);
+  function render(zoom) {
+    assert.ok(draw(canvas, motion, pose, [], { zoom }));
+    const pixels = new Uint32Array(canvas.getContext().pixels.buffer);
+    const unmarked = pixels.slice();
+    assert.ok(draw(canvas, motion, pose, ['quads', 'shoulders'], { zoom }));
+    const { width, height } = canvas;
+    const bounds = [width, height, -1, -1];
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const i = y * width + x;
+        if (pixels[i] === unmarked[i]) continue;
+        bounds[0] = Math.min(bounds[0], x);
+        bounds[1] = Math.min(bounds[1], y);
+        bounds[2] = Math.max(bounds[2], x);
+        bounds[3] = Math.max(bounds[3], y);
+      }
+    }
+    assert.ok(bounds[2] > bounds[0] && bounds[3] > bounds[1]);
+    const floorStart = (height - 3) * width;
+    const floor = pixels.slice(floorStart, floorStart + Math.floor(width / 4));
+    return { bounds, floor };
+  }
+  const normal = render();
+  const center = [canvas.width / 2, canvas.height / 2];
+  for (const zoom of [0.5, 1.5]) {
+    const { bounds, floor } = render(zoom);
+    bounds.forEach((value, i) => {
+      const origin = center[i % 2];
+      const expected = origin + (normal.bounds[i] - origin) * zoom;
+      assert.ok(Math.abs(value - expected) <= 2, `bound ${i} at ${zoom}×: ${value} vs ${expected}`);
+    });
+    assert.notDeepEqual(floor, normal.floor);
+  }
+  assert.deepEqual(render(1), normal);
 });

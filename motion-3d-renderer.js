@@ -87,7 +87,7 @@ const drawMovementPose3D = (() => {
     return colorRamps.get(color);
   }
 
-  // Use the whole repetition'state envelope so seeking and playback never recenter
+  // Use the whole repetition's envelope so seeking and playback never recenter
   // the camera. Equipment, a thrown ball and feet in flight all contribute.
   function getEnvelope(motion) {
     if (motionEnvelopes.has(motion)) return motionEnvelopes.get(motion);
@@ -118,7 +118,7 @@ const drawMovementPose3D = (() => {
     return frame;
   }
 
-  function createCamera(envelope, width, height, yaw, pitch) {
+  function createCamera(envelope, width, height, yaw, pitch, zoom) {
     // Keep the camera above the floor, including when a push-up is seen from low down.
     pitch = Math.max(pitch, Math.asin((envelope.target[1] - floorY + 4) / distance));
     const sy = Math.sin(yaw);
@@ -150,7 +150,7 @@ const drawMovementPose3D = (() => {
     const [tx, ty, tz] = envelope.target;
     return {
       toCameraVector,
-      focal,
+      focal: focal * zoom,
       sy,
       cy,
       sp,
@@ -401,11 +401,13 @@ const drawMovementPose3D = (() => {
     }
     const yaw = view.yaw ?? 0.48;
     const pitch = view.pitch ?? 0.09;
-    if (state.motion !== motion || state.yaw !== yaw || state.pitch !== pitch) {
+    const zoom = Number.isFinite(view.zoom) && view.zoom > 0 ? view.zoom : 1;
+    if (state.motion !== motion || state.yaw !== yaw || state.pitch !== pitch || state.zoom !== zoom) {
       state.motion = motion;
       state.yaw = yaw;
       state.pitch = pitch;
-      state.camera = createCamera(getEnvelope(motion), width, height, yaw, pitch);
+      state.zoom = zoom;
+      state.camera = createCamera(getEnvelope(motion), width, height, yaw, pitch, zoom);
       makeStage(state, state.camera);
     }
     state.pixels.set(state.background);

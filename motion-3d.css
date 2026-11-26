@@ -41,8 +41,7 @@
   flex-wrap: wrap;
   gap: 5px;
 }
-.motion-camera-views button {
-  flex: 1 1 auto;
+.motion-camera button {
   min-width: 44px;
   min-height: 36px;
   padding: 5px 9px;
@@ -54,20 +53,39 @@
   line-height: 1.25;
   font-weight: 650;
 }
+.motion-camera-views button { flex: 1 1 auto; }
 .motion-camera-views button[aria-pressed="true"] {
   border-color: #658361;
   background: #e3efd9;
   color: #254b30;
 }
+.motion-camera-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-top: 7px;
+}
+.motion-camera-zoom { display: inline-flex; align-items: center; gap: 4px; }
+.motion-camera-zoom button { padding: 0; font-size: 19px; }
+.motion-camera-zoom button:disabled { opacity: .45; cursor: default; }
+.motion-camera-zoom output {
+  min-width: 5ch;
+  text-align: center;
+  color: #254b30;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
 .motion-camera p {
-  margin: 6px 0 0;
+  flex: 1 1 12em;
+  margin: 0;
   color: #516758;
   font-size: 12px;
   line-height: 1.45;
 }
 .motion-card canvas[data-camera-enabled] {
   cursor: grab;
-  touch-action: pan-y pinch-zoom;
+  touch-action: none;
   user-select: none;
   -webkit-user-select: none;
 }
@@ -80,5 +98,5 @@
 }
 .motion-card canvas[data-camera-enabled]:focus-visible { outline-offset: -3px; }
 @media (pointer: coarse) {
-  .motion-player [data-motion-mode], .motion-camera-views button { min-height: 44px; }
+  .motion-player [data-motion-mode], .motion-camera button { min-height: 44px; }
 }

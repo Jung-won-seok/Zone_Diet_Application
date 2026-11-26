@@ -48,7 +48,7 @@ function mountMovementPlayer(root, motion) {
   const events = new AbortController();
   const options = { signal: events.signal };
   let time = 0, speed = 1;
-  let playing = false, frameId = null, lastTick = 0;
+  let playing = false, frameId = null, lastTick = null;
   let shownPhase = -1;
   let activeRegions = [];
   let viewMode = '2d';
@@ -92,21 +92,30 @@ function mountMovementPlayer(root, motion) {
   }
 
   function advance(now) {
-    time = Math.min(motion.duration, time + Math.max(0, now - lastTick) * speed / 1000);
+    if (lastTick === null || now <= lastTick) return;
+    time = (time + (now - lastTick) * speed / 1000) % motion.duration;
     lastTick = now;
+  }
+  function stopClock() {
+    if (frameId !== null) cancelAnimationFrame(frameId);
+    frameId = null;
+    lastTick = null;
+  }
+  function startClock() {
+    if (lastTick !== null || document.hidden) return;
+    lastTick = performance.now();
+    frameId = requestAnimationFrame(tick);
   }
   function stop() {
     playing = false;
-    if (frameId !== null) cancelAnimationFrame(frameId);
-    frameId = null;
+    stopClock();
   }
   function tick(now) {
     frameId = null;
-    if (!playing) return;
+    if (!playing || lastTick === null) return;
     advance(now);
-    if (time >= motion.duration) stop();
     render();
-    if (playing) frameId = requestAnimationFrame(tick);
+    frameId = requestAnimationFrame(tick);
   }
   function pause() {
     if (!playing) return;
@@ -130,10 +139,9 @@ function mountMovementPlayer(root, motion) {
   play.addEventListener('click', () => {
     if (playing) { pause(); return; }
     if (time >= motion.duration) time = 0;
-    lastTick = performance.now();
     playing = true;
     render();
-    frameId = requestAnimationFrame(tick);
+    startClock();
   }, options);
   range.addEventListener('pointerdown', pause, options);
   range.addEventListener('input', () => seek(Number(range.value)), options);
@@ -148,7 +156,15 @@ function mountMovementPlayer(root, motion) {
     rate.setAttribute('aria-label', `재생 속도 ${speed}배, ${speed === 1 ? 0.5 : 1}배로 변경`);
     render();
   }, options);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); }, options);
+  document.addEventListener('visibilitychange', () => {
+    if (!playing) return;
+    if (document.hidden) {
+      advance(performance.now());
+      stopClock();
+    } else {
+      startClock();
+    }
+  }, options);
   render();
   const resize = new ResizeObserver(() => {
     if (!events.signal.aborted) drawPose();
