@@ -5,9 +5,16 @@ function movementPlayerView(motion) {
     return `<button type="button" data-motion-phase="${index}"${index === 0 ? ' aria-current="step"' : ''}>${escapeHTML(frame.label)}</button>`;
   }).join('');
   return `<section class="motion-player" data-motion-player aria-label="동작 시뮬레이션">
-    <h3>동작 시뮬레이션</h3>
+    <div class="motion-heading">
+      <h3>동작 시뮬레이션</h3>
+      <div class="motion-modes" role="group" aria-label="동작 보기 방식">
+        <button type="button" data-motion-mode="2d" aria-pressed="true">2D</button>
+        <button type="button" data-motion-mode="3d" aria-pressed="false">3D</button>
+      </div>
+    </div>
     <div class="motion-card">
       <canvas width="320" height="220" role="img" aria-label="현재 동작 자세"></canvas>
+      ${movement3DControlsView()}
       <div class="motion-controls">
         <div class="motion-toolbar">
           <button class="motion-play" type="button" data-motion-play><span data-motion-icon aria-hidden="true">▶</span><span data-motion-play-label>재생</span></button>
@@ -21,6 +28,7 @@ function movementPlayerView(motion) {
         </label>
       </div>
     </div>
+    ${movementMuscleView()}
     <div class="motion-phases" role="group" aria-label="단계로 이동">${phaseButtons}</div>
   </section>`;
 }
@@ -34,22 +42,36 @@ function mountMovementPlayer(root, motion) {
   const range = root.querySelector('[data-motion-time]');
   const clock = root.querySelector('[data-motion-current]');
   const label = root.querySelector('[data-motion-label]');
+  const muscles = root.querySelector('[data-motion-muscles]');
   const steps = Array.from(root.querySelectorAll('[data-motion-phase]'));
+  const modes = Array.from(root.querySelectorAll('[data-motion-mode]'));
   const events = new AbortController();
   const options = { signal: events.signal };
   let time = 0, speed = 1;
   let playing = false, frameId = null, lastTick = 0;
   let shownPhase = -1;
+  let activeRegions = [];
+  let viewMode = '2d';
+  let currentPose;
+  const camera = mountMovementCamera(canvas, root.querySelector('[data-motion-camera]'), drawPose);
+
+  function drawPose() {
+    if (!currentPose) return;
+    if (viewMode === '3d') drawMovementPose3D(canvas, motion, currentPose, activeRegions, camera.getView());
+    else drawMovementPose(canvas, motion, currentPose, activeRegions);
+  }
 
   function render() {
     const { pose, phaseIndex } = sampleMovementPose(motion, time);
-    drawMovementPose(canvas, motion, pose);
+    currentPose = pose;
     const phase = motion.frames[phaseIndex].label;
     range.value = time.toFixed(2);
     range.setAttribute('aria-valuetext', `${time.toFixed(2)}초, ${phase}`);
     clock.textContent = time.toFixed(2);
     if (phaseIndex !== shownPhase) {
       shownPhase = phaseIndex;
+      activeRegions = getMovementMuscles(motion.id, phaseIndex);
+      updateMovementMuscleView(muscles, activeRegions);
       label.textContent = phase;
       canvas.setAttribute('aria-label', phase + ' 자세');
       let currentStep = steps[0];
@@ -61,6 +83,7 @@ function mountMovementPlayer(root, motion) {
         else step.removeAttribute('aria-current');
       }
     }
+    drawPose();
     const action = playing ? '일시정지' : time >= motion.duration ? '다시 재생' : '재생';
     if (playLabel.textContent !== action) {
       playLabel.textContent = action;
@@ -96,6 +119,14 @@ function mountMovementPlayer(root, motion) {
     time = Math.max(0, Math.min(seconds, motion.duration));
     render();
   }
+  for (const button of modes) {
+    button.addEventListener('click', () => {
+      viewMode = button.dataset.motionMode;
+      for (const mode of modes) mode.setAttribute('aria-pressed', String(mode === button));
+      camera.setEnabled(viewMode === '3d');
+      drawPose();
+    }, options);
+  }
   play.addEventListener('click', () => {
     if (playing) { pause(); return; }
     if (time >= motion.duration) time = 0;
@@ -120,7 +151,7 @@ function mountMovementPlayer(root, motion) {
   document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); }, options);
   render();
   const resize = new ResizeObserver(() => {
-    if (!events.signal.aborted) drawMovementPose(canvas, motion, sampleMovementPose(motion, time).pose);
+    if (!events.signal.aborted) drawPose();
   });
   resize.observe(canvas);
   return {
@@ -128,6 +159,7 @@ function mountMovementPlayer(root, motion) {
     dispose() {
       stop();
       resize.disconnect();
+      camera.dispose();
       events.abort();
     }
   };

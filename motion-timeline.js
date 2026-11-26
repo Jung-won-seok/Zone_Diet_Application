@@ -1,4 +1,7 @@
-const movementMotions = { ...strengthMotions, ...bodyweightMotions, ...equipmentMotions };
+const movementMotions = Object.fromEntries(
+  Object.entries({ ...strengthMotions, ...bodyweightMotions, ...equipmentMotions })
+    .map(([id, motion]) => [id, { id, ...motion }])
+);
 
 function getMovementMotion(id) {
   return Object.hasOwn(movementMotions, id) ? movementMotions[id] : null;

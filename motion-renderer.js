@@ -49,6 +49,41 @@ const movementDrawing = (() => {
     return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
   }
 
+  // Each patch has a start and end along its body segment, a lateral offset
+  // (positive toward the front), and a width radius in stage coordinates.
+  const musclePatches = {
+    thigh: { quads: [.19, .83, 2.2, 2.5], hamstrings: [.20, .78, -2.4, 2.25] },
+    shin: { calves: [.14, .61, -1.4, 2.15] },
+    trunk: {
+      chest: [.07, .36, 3.7, 3.2], back: [.07, .59, -3.8, 3.35],
+      core: [.42, .80, 3.1, 3.1], hipFlexors: [.80, 1.02, 3.6, 2.4],
+      glutes: [.84, 1.10, -2.9, 3.75],
+    },
+    upperArm: {
+      shoulders: [-.10, .26, 0, 4.1],
+      biceps: [.25, .81, 1.55, 1.8], triceps: [.17, .82, -1.7, 1.8],
+    },
+    forearm: { forearms: [.12, .69, 0, 2.2] },
+  };
+
+  function paintMuscles(ctx, regions, patches, a, b) {
+    if (!regions.length) return;
+    const dx = b[0] - a[0], dy = b[1] - a[1], length = Math.hypot(dx, dy);
+    if (!length) return;
+    const angle = Math.atan2(dy, dx);
+    for (const region of regions) {
+      if (!Object.hasOwn(patches, region)) continue;
+      const [start, end, offset, width] = patches[region];
+      const middle = (start + end) / 2;
+      const x = a[0] + dx * middle + dy / length * offset;
+      const y = a[1] + dy * middle - dx / length * offset;
+      ctx.beginPath();
+      ctx.ellipse(x, y, length * (end - start) / 2, width, angle, 0, Math.PI * 2);
+      ctx.fillStyle = '#f79858'; ctx.fill();
+      ctx.strokeStyle = '#9d4626'; ctx.lineWidth = .9; ctx.stroke();
+    }
+  }
+
   function shoe(ctx, ankle, toe, far, supportY) {
     const length = Math.hypot(toe[0] - ankle[0], toe[1] - ankle[1]);
     const lateral = toe[0] - ankle[0];
@@ -69,32 +104,36 @@ const movementDrawing = (() => {
     ctx.restore();
   }
 
-  function leg(ctx, hip, knee, ankle, toe, far, supportY) {
+  function leg(ctx, hip, knee, ankle, toe, far, supportY, regions) {
     const tint = far ? farSkin : skin;
     segment(ctx, hip, knee, 6.4, 4.4, tint);
     segment(ctx, knee, ankle, 4.6, 2.7, tint);
     segment(ctx, hip, along(hip, knee, .48), 7.2, 6.1, far ? '#182f2c' : shorts);
     segment(ctx, along(knee, ankle, .80), ankle, 3.4, 2.9, far ? '#9da99e' : '#e4e7d4');
+    paintMuscles(ctx, regions, musclePatches.thigh, hip, knee);
+    paintMuscles(ctx, regions, musclePatches.shin, knee, ankle);
     shoe(ctx, ankle, toe, far, supportY);
   }
 
-  function arm(ctx, shoulder, elbow, wrist, far) {
+  function arm(ctx, shoulder, elbow, wrist, far, regions) {
     const tint = far ? farSkin : skin;
     segment(ctx, shoulder, elbow, 4.6, 3.45, tint);
     segment(ctx, elbow, wrist, 3.65, 2.5, tint);
     oval(ctx, wrist, 3.1, 2.8, tint);
     segment(ctx, shoulder, along(shoulder, elbow, .23), 5.5, 4.9, far ? '#2e584b' : jersey);
+    paintMuscles(ctx, regions, musclePatches.upperArm, shoulder, elbow);
+    paintMuscles(ctx, regions, musclePatches.forearm, elbow, wrist);
   }
 
-  function athlete(ctx, p, motion) {
+  function athlete(ctx, p, motion, regions) {
     const supportY = motion.equipment === 'box' && p.toe[0] >= motion.anchor[0]
       ? motion.anchor[1] : 202;
     ctx.save();
     ctx.translate(-3, 0);
-    leg(ctx, p.hip, p.rearKnee || p.knee, p.rearAnkle || p.ankle, p.rearToe || p.toe, true, supportY);
-    arm(ctx, p.shoulder, p.elbow, p.wrist, true);
+    leg(ctx, p.hip, p.rearKnee || p.knee, p.rearAnkle || p.ankle, p.rearToe || p.toe, true, supportY, p.rearKnee ? regions : []);
+    arm(ctx, p.shoulder, p.elbow, p.wrist, true, []);
     ctx.restore();
-    leg(ctx, p.hip, p.knee, p.ankle, p.toe, false, supportY);
+    leg(ctx, p.hip, p.knee, p.ankle, p.toe, false, supportY, regions);
 
     const neck = along(p.shoulder, p.head, .68);
     segment(ctx, p.shoulder, neck, 4.7, 3.8, skin);
@@ -105,7 +144,8 @@ const movementDrawing = (() => {
     const sideX = Math.cos(sideAngle), sideY = Math.sin(sideAngle);
     line(ctx, [[chest[0]+sideX*6,chest[1]+sideY*6],[waist[0]+sideX*5,waist[1]+sideY*5]], '#76a88a', 1.7);
     segment(ctx, along(p.shoulder,p.hip,.89), p.hip, 7.2, 7.2, shorts);
-    arm(ctx, p.shoulder, p.elbow, p.wrist, false);
+    paintMuscles(ctx, regions, musclePatches.trunk, p.shoulder, p.hip);
+    arm(ctx, p.shoulder, p.elbow, p.wrist, false, regions);
     const cuff = along(p.elbow, p.wrist, .79);
     line(ctx, [cuff, along(p.elbow,p.wrist,.85)], '#faf0d2', 5.7);
 
@@ -238,7 +278,7 @@ const movementDrawing = (() => {
   return { stage, athlete, gear };
 })();
 
-function drawMovementPose(canvas, motion, pose) {
+function drawMovementPose(canvas, motion, pose, regionIds = []) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return false;
   const cssWidth = canvas.clientWidth || 320;
@@ -251,7 +291,7 @@ function drawMovementPose(canvas, motion, pose) {
   ctx.setTransform(pixelWidth / 320, 0, 0, pixelHeight / 220, 0, 0);
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   movementDrawing.stage(ctx, motion, pose);
-  movementDrawing.athlete(ctx, pose, motion);
+  movementDrawing.athlete(ctx, pose, motion, regionIds);
   movementDrawing.gear(ctx, motion.equipment, pose);
   return true;
 }

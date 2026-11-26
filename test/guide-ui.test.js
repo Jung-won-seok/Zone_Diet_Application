@@ -9,7 +9,8 @@ function guideContext(extra = {}) {
     ...extra
   });
   for (const file of ['guide-movements', 'guide-benchmarks', 'guide-terms', 'guide-match',
-    'motion-strength', 'motion-bodyweight', 'motion-equipment', 'motion-timeline', 'motion-player', 'guide']) {
+    'motion-strength', 'motion-bodyweight', 'motion-equipment', 'motion-timeline', 'motion-muscles', 'motion-muscle-view',
+    'motion-3d-controls', 'motion-player', 'guide']) {
     vm.runInContext(fs.readFileSync(require.resolve('../' + file), 'utf8'), context);
   }
   return context;
@@ -39,6 +40,8 @@ test('guide searches across categories, combines filters with aliases and can re
   search.value = 'Fran';
   search.oninput();
   assert.match(results.innerHTML, /data-guide-entry="fran"/);
+  assert.match(results.innerHTML, /For Time<\/span> · 3라운드/);
+  assert.match(results.innerHTML, /쓰러스터 · 풀업/);
   assert.equal(filters[2]['aria-pressed'], 'true');
   search.value = '';
   search.oninput();
@@ -100,4 +103,32 @@ test('only benchmark detail for a member offers personal benchmark history', () 
   assert.doesNotMatch(ui.guideDetail(find('fran'), false), /내 지난 기록/);
   assert.doesNotMatch(ui.guideDetail(find('amrap'), true), /내 지난 기록/);
   assert.doesNotMatch(ui.guideDetail(find('toes-to-bar'), true), /내 지난 기록/);
+});
+
+test('named workouts present the prescribed order, per-round reps, equipment and scoring', () => {
+  const ui = guideContext();
+  const catalog = ui.guideEntries().filter(entry => entry.category === 'benchmark');
+  for (const entry of catalog) {
+    const html = ui.guideDetail(entry, true);
+    assert.match(html, /class="benchmark-summary"/, entry.id);
+    assert.ok(html.includes(entry.description) && html.includes(entry.scoring), entry.id);
+    assert.ok(html.includes(entry.sourceUrl), entry.id);
+    let previous = -1;
+    for (const step of entry.steps) {
+      const position = html.indexOf('>' + step.name + '<');
+      assert.ok(position > previous, entry.id);
+      previous = position;
+      if (step.amount) assert.ok(html.includes('>' + step.amount + '<'), entry.id);
+    }
+    for (const rule of entry.rx || []) {
+      assert.ok(html.includes(rule.label) && html.includes(rule.women) && html.includes(rule.men), entry.id);
+    }
+  }
+  const detail = id => ui.guideDetail(catalog.find(entry => entry.id === id), true);
+  const rounds = [...detail('fran').matchAll(/<td>(\d+)회<\/td>/g)].map(hit => Number(hit[1]));
+  assert.deepEqual(rounds, [21, 21, 15, 15, 9, 9]);
+  assert.equal((detail('annie').match(/<th scope="row">\d라운드/g) || []).length, 5);
+  assert.match(detail('cindy'), /AMRAP[\s\S]*20분[\s\S]*5회[\s\S]*10회[\s\S]*15회/);
+  assert.doesNotMatch(detail('cindy'), /class="benchmark-rx"/);
+  assert.match(detail('karen'), /공 무게[\s\S]*14 lb[\s\S]*20 lb[\s\S]*표적 높이[\s\S]*9 ft[\s\S]*10 ft/);
 });

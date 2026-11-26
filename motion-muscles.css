@@ -1,0 +1,80 @@
+.motion-muscles {
+  display: grid;
+  grid-template-columns: minmax(112px, 150px) minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  margin-top: 9px;
+  padding: 11px 16px;
+  border: 1px solid #d4ded1;
+  border-radius: 12px;
+  background: #f8faf6;
+  color: var(--ink);
+}
+.motion-muscle-map {
+  display: flex;
+  justify-content: space-around;
+  gap: 4px;
+  padding-right: 12px;
+  border-right: 1px solid #d9e2d5;
+}
+.motion-muscle-figure {
+  display: grid;
+  justify-items: center;
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+}
+.motion-muscle-figure svg { display: block; width: 100%; max-width: 58px; }
+.motion-muscle-figure figcaption {
+  color: #536257;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.motion-muscle-map path { stroke-linecap: round; stroke-linejoin: round; }
+.motion-muscle-map .muscle-body { fill: #ecf0e9; stroke: #768775; stroke-width: 1.45; }
+.motion-muscle-map .muscle-area { fill: #dbe3d8; stroke: #b0bdac; stroke-width: .8; }
+.motion-muscle-map .muscle-area[data-active] { fill: #f79858; stroke: #9d4626; stroke-width: 1.8; }
+.motion-muscle-map .muscle-contour { fill: none; stroke: #8a9a87; stroke-width: 1.1; }
+.motion-muscle-copy h4 {
+  margin: 0 0 5px;
+  color: #2a4537;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.motion-muscle-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.motion-muscle-labels li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #39493e;
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: keep-all;
+}
+.motion-muscle-labels li::before {
+  content: '';
+  flex: 0 0 7px;
+  width: 7px;
+  height: 7px;
+  border: 1px solid #9d4626;
+  border-radius: 50%;
+  background: #f79858;
+}
+@media (max-width: 480px) {
+  .motion-muscles { grid-template-columns: minmax(96px, 36%) minmax(0, 1fr); padding: 9px 11px; gap: 10px; }
+  .motion-muscle-map { padding-right: 7px; }
+}
+@media (forced-colors: active) {
+  .motion-muscle-map .muscle-body { fill: Canvas; stroke: CanvasText; }
+  .motion-muscle-map .muscle-area { fill: Canvas; stroke: GrayText; }
+  .motion-muscle-map .muscle-area[data-active] { fill: Highlight; stroke: CanvasText; }
+  .motion-muscle-map .muscle-contour { stroke: CanvasText; }
+}
