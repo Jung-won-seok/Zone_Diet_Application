@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 const simulation = vm.createContext({});
-for (const file of ['motion-strength', 'motion-equipment', 'motion-bodyweight', 'motion-timeline', 'motion-muscles']) {
+for (const file of ['motion-strength', 'motion-equipment', 'motion-bodyweight', 'motion-muscle-ups', 'motion-timeline', 'motion-muscles']) {
   vm.runInContext(fs.readFileSync(require.resolve('../' + file), 'utf8'), simulation);
 }
 const regionLabels = vm.runInContext('movementMuscleLabels', simulation);

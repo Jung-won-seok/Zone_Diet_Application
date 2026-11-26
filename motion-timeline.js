@@ -1,5 +1,5 @@
 const movementMotions = Object.fromEntries(
-  Object.entries({ ...strengthMotions, ...bodyweightMotions, ...equipmentMotions })
+  Object.entries({ ...strengthMotions, ...bodyweightMotions, ...equipmentMotions, ...muscleUpMotions })
     .map(([id, motion]) => [id, { id, ...motion }])
 );
 

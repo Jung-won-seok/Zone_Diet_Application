@@ -44,9 +44,9 @@ const buildMovementScene3D = (() => {
     // actual equipment width. A wide snatch and narrow kettlebell grip are
     // distinct from the front as well as in profile.
     const handWidthByEquipment = { rig: 17, rope: 22, kettlebell: 4, ball: 4.7, rower: 10.5, wall: 17, mat: 5 };
-    const handWidth = motion.equipment === 'barbell'
+    const handWidth = pose.ringGripWidth ?? (motion.equipment === 'barbell'
       ? (wideGrip.has(motion.id) ? 32 : 17)
-      : (handWidthByEquipment[motion.equipment] || 15);
+      : (handWidthByEquipment[motion.equipment] || 15));
     const head = xyz(pose.head), shoulder = xyz(pose.shoulder), hip = xyz(pose.hip);
     const trunk = segmentBasis(shoulder, hip);
     anatomicalOval(between(shoulder, hip, .29), trunk, 8.7, trunk.length * .43, 15.2, shirt);
@@ -69,7 +69,8 @@ const buildMovementScene3D = (() => {
 
       const rear = sign < 0 && pose.rearKnee;
       const butterfly = motion.id === 'sit-up';
-      const footWidth = butterfly ? 3.1 : motion.equipment === 'rig' ? 5.2 : 9;
+      const hanging = motion.equipment === 'rig' || motion.equipment === 'rings';
+      const footWidth = butterfly ? 3.1 : hanging ? 5.2 : 9;
       const legHip = xyz(pose.hip, sign * 7.5);
       const knee = xyz(rear ? pose.rearKnee : pose.knee, sign * (butterfly ? 26 : footWidth + 1));
       const ankle = xyz(rear ? pose.rearAnkle : pose.ankle, sign * footWidth);
@@ -139,6 +140,24 @@ const buildMovementScene3D = (() => {
           box([x - 31, 200.8, z], 9, 1.2, 3.5, darkSteel);
         }
         tube([x, y, -44], [x, y, 44], 1.65, 1.65, darkSteel);
+        break;
+      }
+      case 'rings': {
+        const [x, y] = anchor;
+        box([x, y - 2, 0], 2.2, 1.6, 38, steel);
+        for (const sign of [-1, 1]) {
+          const z = sign * 37;
+          box([x - 46, (202 + y - 2) / 2, z], 1.4, (202 - y + 2) / 2, 1.4, steel);
+          box([x - 23, y - 2, z], 23, 1.6, 1.4, steel);
+          tube([x - 46, y + 15, z], [x - 29, y - 2, z], 1, 1, metal);
+          box([x - 46, 201, z], 6, 1, 3, darkSteel);
+          const { mount, top, points } = movementRingGeometry(anchor, pose, sign);
+          tube(mount, top, 1.15, 1.15, darkSteel);
+          tube(between(mount, top, .21), between(mount, top, .27), 1.65, 1.65, metal);
+          for (let i = 1; i < points.length; i++) {
+            tube(points[i - 1], points[i], 1.45, 1.45, '#bb834f');
+          }
+        }
         break;
       }
       case 'box': {

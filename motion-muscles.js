@@ -20,6 +20,13 @@ const movementStageMuscles = (() => {
   const hang = ['forearms', 'back'];
   const pull = ['back', 'biceps'];
   const raiseLegs = ['core', 'hipFlexors'];
+  // The muscle-up moves from pulling to a dip and then supported elbow extension.
+  // https://pmc.ncbi.nlm.nih.gov/articles/PMC10824315/
+  const dip = ['chest', 'triceps', 'shoulders'];
+  const muscleUpStages = {
+    '아치 스윙': ['glutes', 'back'], '할로우 스윙': ['core', 'back'],
+    '팔을 펴고 지지하기': ['triceps', 'shoulders', 'core'], '매달리기로 돌아오기': ['back', 'forearms'],
+  };
 
   // https://www.nsca.com/globalassets/about/position-statements/weighlifting-for-sports-performance.pdf
   // https://www.crossfit.com/essentials/the-thruster
@@ -98,6 +105,14 @@ const movementStageMuscles = (() => {
       '다리를 앞으로 보내기': ['core', 'back'], '몸 당기기': pull,
       '턱이 바 위로': pull, '바에서 밀어내기': ['back', 'core'],
       '팔 펴기': ['back', 'biceps'], '다시 매달리기': hang,
+    },
+    'bar-muscle-up': {
+      ...muscleUpStages, '매달리기': hang, '엉덩이 끌어올리기': ['back', 'glutes', 'core'],
+      '가슴을 바 위로 넘기기': ['back', 'shoulders', 'core'], '바 위에서 밀어내기': dip,
+    },
+    'ring-muscle-up': {
+      ...muscleUpStages, '링에 매달리기': hang, '링을 몸 가까이 당기기': ['back', 'biceps', 'forearms'],
+      '가슴을 링 사이로 넘기기': ['chest', 'shoulders', 'core'], '링 딥으로 밀어내기': dip,
     },
     'push-up': {
       '팔을 편 플랭크': plank, '몸통 내리기': pushUp, '가슴을 바닥 가까이': pushUp,

@@ -9,7 +9,7 @@ function guideContext(extra = {}) {
     ...extra
   });
   for (const file of ['guide-movements', 'guide-benchmarks', 'guide-terms', 'guide-match',
-    'motion-strength', 'motion-bodyweight', 'motion-equipment', 'motion-timeline', 'motion-muscles', 'motion-muscle-view',
+    'motion-strength', 'motion-bodyweight', 'motion-equipment', 'motion-muscle-ups', 'motion-timeline', 'motion-muscles', 'motion-muscle-view',
     'motion-3d-controls', 'motion-player', 'guide']) {
     vm.runInContext(fs.readFileSync(require.resolve('../' + file), 'utf8'), context);
   }
@@ -47,6 +47,32 @@ test('guide searches across categories, combines filters with aliases and can re
   search.oninput();
   assert.match(results.innerHTML, /data-guide-entry="cindy"/);
   assert.doesNotMatch(results.innerHTML, /data-guide-entry="toes-to-bar"/);
+});
+
+test('머슬업 검색은 두 기구를 보여주고 와드의 기구별 표기는 각각 해당 동작을 연다', () => {
+  const ui = guideContext();
+  const entries = Array.from(ui.guideEntries());
+  const ids = ['bar-muscle-up', 'ring-muscle-up'];
+  for (const query of ['머슬업', '머슬 업', 'Muscle-Up']) {
+    assert.deepEqual(entries.filter(entry => ui.guideSearchMatches(entry, query)).map(entry => entry.id).sort(), ids);
+  }
+  for (const [query, expected] of [['bmu', ids[0]], ['RMU', ids[1]], ['rmus', ids[1]]]) {
+    assert.deepEqual(entries.filter(entry => ui.guideSearchMatches(entry, query)).map(entry => entry.id), [expected]);
+  }
+  const wod = '3 BMU · 3 RMUs · Bar Muscle-Ups · 링 머슬 업을 하고 바머슬업 1회';
+  const html = ui.guideInlineHTML(wod);
+  assert.deepEqual([...html.matchAll(/data-guide-entry="([^"]+)"/g)].map(hit => hit[1]),
+    [ids[0], ids[1], ids[0], ids[1], ids[0]]);
+  assert.equal(html.replace(/<[^>]+>/g, ''), wod);
+  assert.doesNotMatch(ui.guideInlineHTML('머슬업 5회'), /data-guide-entry/);
+  const videos = ids.map(id => {
+    const entry = entries.find(item => item.id === id);
+    const detail = ui.guideDetail(entry, false, ui.getMovementMotion(id));
+    assert.match(detail, /data-motion-mode="3d"/);
+    assert.ok(detail.includes('data-guide-video="' + entry.videoId + '"'));
+    return entry.videoId;
+  });
+  assert.notEqual(videos[0], videos[1]);
 });
 
 test('movement guide loads video only on activation and returns focus without scrolling or changing route', () => {

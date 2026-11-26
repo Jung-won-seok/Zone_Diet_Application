@@ -4,12 +4,27 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 const browser = vm.createContext({});
-for (const file of ['guide-movements', 'motion-bodyweight', 'motion-strength', 'motion-equipment', 'motion-timeline']) {
+for (const file of ['guide-movements', 'motion-bodyweight', 'motion-strength', 'motion-equipment', 'motion-muscle-ups', 'motion-timeline']) {
   vm.runInContext(fs.readFileSync(require.resolve('../' + file), 'utf8'), browser);
 }
 const ids = vm.runInContext('guideMovements.map(m => m.id)', browser);
 const required = ['head', 'shoulder', 'elbow', 'wrist', 'hip', 'knee', 'ankle', 'toe'];
 const segment = (p, a, b) => Math.hypot(p[a][0] - p[b][0], p[a][1] - p[b][1]);
+
+test('both muscle-ups reach straight-arm support above the grip and return to the starting hang', () => {
+  for (const id of ['bar-muscle-up', 'ring-muscle-up']) {
+    const { frames } = browser.getMovementMotion(id);
+    const hang = frames[0].pose;
+    const support = frames.find(f => f.label === '팔을 펴고 지지하기').pose;
+    assert.ok(hang.shoulder[1] > hang.wrist[1] && support.shoulder[1] < support.wrist[1], id);
+    for (const pose of [hang, support]) {
+      const reach = segment(pose, 'wrist', 'shoulder');
+      const arm = segment(pose, 'wrist', 'elbow') + segment(pose, 'elbow', 'shoulder');
+      assert.ok(reach > 0.98 * arm, id);
+    }
+    assert.deepEqual(frames.at(-1).pose, hang, id);
+  }
+});
 
 test('every guide movement has a complete timeline that can be scrubbed in either direction', () => {
   assert.deepEqual(Array.from(ids).sort(), Array.from(vm.runInContext('Object.keys(movementMotions)', browser)).sort());

@@ -19,6 +19,18 @@ const guideMovements = [
     sourceUrl: 'https://www.crossfit.com/essentials/the-kipping-pull-up', videoId: 'lzRo-4pq_AY',
   },
   {
+    id: 'bar-muscle-up', name: '바 머슬업', english: 'Bar Muscle-Up',
+    aliases: ['BMU', 'BMUs', 'Bar Muscle-Ups', '바 머슬 업', '철봉 머슬 업', '키핑 바 머슬 업', 'Kipping Bar Muscle-Up', 'Kipping Bar Muscle-Ups'],
+    description: '철봉에 매달려 앞뒤 스윙을 이용해 몸을 끌어올리는 키핑 동작이에요. 가슴을 바 위로 넘긴 뒤 바를 아래로 밀어 양팔을 펴면 1회예요.',
+    sourceUrl: 'https://www.crossfit.com/essentials/the-kipping-bar-muscle-up', videoId: 'OCg3UXgzftc',
+  },
+  {
+    id: 'ring-muscle-up', name: '링 머슬업', english: 'Ring Muscle-Up',
+    aliases: ['RMU', 'RMUs', 'Ring Muscle-Ups', '링 머슬 업', '키핑 링 머슬 업', 'Kipping Ring Muscle-Up', 'Kipping Ring Muscle-Ups'],
+    description: '두 링에 매달려 앞뒤 스윙을 이용하는 키핑 동작이에요. 링을 가슴 가까이 당기고 어깨를 두 링 사이로 넘긴 뒤, 링을 아래로 밀어 양팔을 펴면 1회예요.',
+    sourceUrl: 'https://www.crossfit.com/essentials/the-kipping-muscle-up', videoId: 'G8W0BhzrWcs',
+  },
+  {
     id: 'push-up', name: '푸시업', english: 'Push-Up',
     aliases: ['Push-Ups', 'Pushups', '푸쉬업', '팔굽혀펴기'],
     description: '손과 발끝으로 바닥을 짚고 몸을 곧게 유지해요. 가슴을 바닥까지 내렸다가 손으로 바닥을 밀어 팔을 펴요.',

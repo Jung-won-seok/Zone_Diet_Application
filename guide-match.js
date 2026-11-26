@@ -5,8 +5,15 @@ function guideAliasKey(value) {
 
 function guideSearchMatches(entry, query) {
   const key = guideAliasKey(query);
-  return !key || [entry.name, entry.english, ...(entry.aliases || [])]
-    .some(name => guideAliasKey(name).includes(key));
+  if (!key) return true;
+  const latin = /^[a-z0-9]+$/.test(key);
+  return [entry.name, entry.english, ...(entry.aliases || [])].some(name => {
+    if (!guideAliasKey(name).includes(key)) return false;
+    if (!latin) return true;
+    // Join complete words for "muscleup", without matching "rmu" across "bar muscle-up".
+    const words = name.normalize('NFKC').split(/[\s\p{Pd}]+/u).map(guideAliasKey);
+    return words.some((word, index) => word.includes(key) || words.slice(index).join('').startsWith(key));
+  });
 }
 
 function guideMovementPlural(name) {

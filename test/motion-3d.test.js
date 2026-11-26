@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 const scene = vm.createContext({ window: { devicePixelRatio: 1 } });
-for (const file of ['guide-movements', 'motion-strength', 'motion-equipment', 'motion-bodyweight',
+for (const file of ['guide-movements', 'motion-strength', 'motion-equipment', 'motion-bodyweight', 'motion-muscle-ups',
   'motion-timeline', 'motion-muscles', 'motion-3d-model', 'motion-3d-renderer']) {
   vm.runInContext(fs.readFileSync(require.resolve('../' + file), 'utf8'), scene);
 }
@@ -37,6 +37,33 @@ test('3D equipment and athlete follow the sampled pose at keyframes and during a
         }
       }
     }
+  }
+});
+
+test('ring muscle-up keeps each moving hand on its own closed ring and each strap on its mount', () => {
+  const motion = scene.getMovementMotion('ring-muscle-up');
+  const distance = (a, b) => Math.hypot(...a.map((v, i) => v - b[i]));
+  const startPose = motion.frames[0].pose;
+  for (const sign of [-1, 1]) {
+    const start = scene.movementRingGeometry(motion.anchor, startPose, sign);
+    let travel = 0;
+    for (let i = 0; i <= 40; i++) {
+      const { pose } = scene.sampleMovementPose(motion, i * motion.duration / 40);
+      const ring = scene.movementRingGeometry(motion.anchor, pose, sign);
+      const parts = build(motion, pose);
+      const hasTube = (from, to) => parts.some(p => p.type === 'tube' &&
+        ((distance(p.a, from) < 0.001 && distance(p.b, to) < 0.001) ||
+         (distance(p.b, from) < 0.001 && distance(p.a, to) < 0.001)));
+      assert.equal(distance(start.mount, ring.mount), 0);
+      assert.ok(Math.abs(distance(ring.mount, ring.top) - distance(start.mount, start.top)) < 1);
+      assert.ok(hasTube(ring.mount, ring.top));
+      assert.equal(distance(ring.grip, ring.points[0]), 0);
+      assert.equal(distance(ring.grip, ring.points.at(-1)), 0);
+      assert.ok(parts.some(p => p.type === 'ellipsoid' && distance(p.center, ring.grip) < 0.001));
+      for (let j = 1; j < ring.points.length; j++) assert.ok(hasTube(ring.points[j - 1], ring.points[j]));
+      travel = Math.max(travel, distance(start.grip, ring.grip));
+    }
+    assert.ok(travel > 1, 'the grip moves with the swing');
   }
 });
 

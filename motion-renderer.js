@@ -125,13 +125,28 @@ const movementDrawing = (() => {
     paintMuscles(ctx, regions, musclePatches.forearm, elbow, wrist);
   }
 
-  function athlete(ctx, p, motion, regions) {
+  // The side illustration offsets the far hand slightly to show both rings.
+  // The rotatable model uses their actual lateral positions.
+  const farRingOffset = -7;
+  function ringLoop(ctx, points, far = false) {
+    const offset = far ? farRingOffset : 0;
+    const path = points.map(([x, y]) => [x + offset, y]);
+    line(ctx, path, far ? '#876c4f' : '#694b35', 3.6);
+    line(ctx, path, far ? '#c0a37b' : '#dfa86e', 2);
+  }
+
+  function athlete(ctx, p, motion, regions, rings) {
     const supportY = motion.equipment === 'box' && p.toe[0] >= motion.anchor[0]
       ? motion.anchor[1] : 202;
     ctx.save();
     ctx.translate(-3, 0);
     leg(ctx, p.hip, p.rearKnee || p.knee, p.rearAnkle || p.ankle, p.rearToe || p.toe, true, supportY, p.rearKnee ? regions : []);
-    arm(ctx, p.shoulder, p.elbow, p.wrist, true, []);
+    if (rings) {
+      const offset = farRingOffset + 3;
+      arm(ctx, p.shoulder, [p.elbow[0] + offset / 2, p.elbow[1]], [p.wrist[0] + offset, p.wrist[1]], true, []);
+    } else {
+      arm(ctx, p.shoulder, p.elbow, p.wrist, true, []);
+    }
     ctx.restore();
     leg(ctx, p.hip, p.knee, p.ankle, p.toe, false, supportY, regions);
 
@@ -145,9 +160,17 @@ const movementDrawing = (() => {
     line(ctx, [[chest[0]+sideX*6,chest[1]+sideY*6],[waist[0]+sideX*5,waist[1]+sideY*5]], '#76a88a', 1.7);
     segment(ctx, along(p.shoulder,p.hip,.89), p.hip, 7.2, 7.2, shorts);
     paintMuscles(ctx, regions, musclePatches.trunk, p.shoulder, p.hip);
+    if (rings) ringLoop(ctx, rings[1].points);
     arm(ctx, p.shoulder, p.elbow, p.wrist, false, regions);
     const cuff = along(p.elbow, p.wrist, .79);
     line(ctx, [cuff, along(p.elbow,p.wrist,.85)], '#faf0d2', 5.7);
+    if (rings) {
+      // The outer half of the near ring passes in front of the forearm
+      // during turnover. Leave the fingers visible around the bottom grip.
+      const points = rings[1].points;
+      ringLoop(ctx, points.slice(0, (points.length + 1) / 2));
+      oval(ctx, p.wrist, 3.1, 2.8, skin);
+    }
 
     ctx.save();
     ctx.translate(...p.head);
@@ -167,7 +190,7 @@ const movementDrawing = (() => {
     ctx.restore();
   }
 
-  function stage(ctx, motion, p) {
+  function stage(ctx, motion, p, rings) {
     ctx.fillStyle = '#f0f4ea'; ctx.fillRect(0, 0, 320, 220);
     ctx.fillStyle = '#e3eadd'; ctx.fillRect(0, 202, 320, 18);
     line(ctx, [[0,202],[320,202]], '#afbfac', 1.2);
@@ -180,6 +203,21 @@ const movementDrawing = (() => {
         line(ctx, [[x-65,y+20],[x-42,y-6]], '#8d9f90', 2);
         line(ctx, [[x-73,201],[x-57,201]], '#637b6b', 3);
         line(ctx, [[x-5,y],[x+5,y]], ink, 4);
+        break;
+      }
+      case 'rings': {
+        const [x, y] = anchor;
+        line(ctx, [[x - 46, 201], [x - 46, y - 2], [x + 4, y - 2]], '#819589', 3);
+        line(ctx, [[x - 46, y + 15], [x - 29, y - 2]], '#a2b1a4', 2);
+        line(ctx, [[x - 52, 201], [x - 40, 201]], '#718578', 3);
+        rings.forEach((ring, index) => {
+          const far = index === 0, offset = far ? farRingOffset : 0;
+          const mount = [ring.mount[0] + offset, ring.mount[1]];
+          const top = [ring.top[0] + offset, ring.top[1]];
+          line(ctx, [mount, top], far ? '#89978b' : '#41594f', 2.3);
+          line(ctx, [along(mount, top, .21), along(mount, top, .27)], '#a3b1a6', 3.3);
+          if (far) ringLoop(ctx, ring.points, true);
+        });
         break;
       }
       case 'wall':
@@ -237,7 +275,15 @@ const movementDrawing = (() => {
     line(ctx, [[x-2,y],[x+2*Math.cos(a),y+2*Math.sin(a)]], ink, 3.5);
   }
 
-  function gear(ctx, equipment, p) {
+  function gear(ctx, motion, p) {
+    const equipment = motion.equipment;
+    if (motion.id === 'bar-muscle-up') {
+      // The near end of the horizontal bar remains in front of the body
+      // while the hands roll from below the bar to support above it.
+      const [x, y] = motion.anchor;
+      line(ctx, [[x + 1, y], [x + 4, y]], ink, 3.2);
+      oval(ctx, [x + 4, y], 1.7, 1.7, '#92a69a', ink);
+    }
     if (equipment === 'rope') { drawRope(ctx, p); return; }
     if (!p.gear) return;
     const [x,y] = p.gear;
@@ -290,8 +336,10 @@ function drawMovementPose(canvas, motion, pose, regionIds = []) {
   }
   ctx.setTransform(pixelWidth / 320, 0, 0, pixelHeight / 220, 0, 0);
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  movementDrawing.stage(ctx, motion, pose);
-  movementDrawing.athlete(ctx, pose, motion, regionIds);
-  movementDrawing.gear(ctx, motion.equipment, pose);
+  const rings = motion.equipment === 'rings'
+    ? [-1, 1].map(sign => movementRingGeometry(motion.anchor, pose, sign)) : null;
+  movementDrawing.stage(ctx, motion, pose, rings);
+  movementDrawing.athlete(ctx, pose, motion, regionIds, rings);
+  movementDrawing.gear(ctx, motion, pose);
   return true;
 }
