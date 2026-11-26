@@ -17,6 +17,17 @@ const SESSION_AGE = 8 * 60 * 60 * 1000;
 const assetTypes = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.webmanifest': 'application/manifest+json', '.png': 'image/png' };
 const STATIC = new Map(publicAssets.map(file => ['/' + file, [file, assetTypes[path.extname(file)]]]));
 STATIC.set('/', STATIC.get('/index.html'));
+const isLocalHost = host => /^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(host);
+async function sendStatic(req, res, route) {
+  const entry = STATIC.get(route);
+  if (!entry || !['GET', 'HEAD'].includes(req.method)) throw new ApiError(404, '페이지를 찾을 수 없습니다.');
+  const data = await fs.promises.readFile(path.join(__dirname, entry[0]));
+  res.writeHead(200, {
+    'Content-Type': entry[1], 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'same-origin', 'X-Frame-Options': 'DENY',
+  });
+  res.end(req.method === 'HEAD' ? undefined : data);
+}
 class ApiError extends Error { constructor(status, message) { super(message); this.status = status; } }
 const fail = (condition, message) => { if (!condition) throw new ApiError(422, message); };
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -87,7 +98,7 @@ function validateAssignments(body, store) {
     return { id: row.id, teamId: row.teamId, role: row.role, customRole };
   });
 }
-function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '.data'), initialStore, persistStore, mediaStorage, cloud = false, allowedHosts = [], naverConfig, naverFetch = globalThis.fetch } = {}) {
+function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '.data'), initialStore, persistStore, mediaStorage, cloud = false, sharedSessions = cloud, allowedHosts = [], naverConfig, naverFetch = globalThis.fetch } = {}) {
   if (!initialStore) fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
   const storePath = path.join(dataDir, 'store.json');
   function persist(next) {
@@ -117,10 +128,10 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
   const wods = createWodService({ getStore: () => store, commit, ApiError, isValidDate });
   const boxMembers = createBoxMemberService({ getStore: () => store, commit, ApiError, makeUser, blankPersonal });
   const memberships = createMembershipService({ getStore: () => store, commit, ApiError, isValidDate });
-  const sessions = new Map(cloud ? Object.entries(store.authState?.sessions || {}) : []);
-  const failures = new Map(cloud ? Object.entries(store.authState?.failures || {}) : []);
+  const sessions = new Map(sharedSessions ? Object.entries(store.authState?.sessions || {}) : []);
+  const failures = new Map(sharedSessions ? Object.entries(store.authState?.failures || {}) : []);
   async function persistAuth() {
-    if (cloud) await commit({ ...store, authState: { sessions: Object.fromEntries(sessions), failures: Object.fromEntries(failures) } });
+    if (sharedSessions) await commit({ ...store, authState: { sessions: Object.fromEntries(sessions), failures: Object.fromEntries(failures) } });
   }
   const naverAuth = createNaverAuth({ getStore: () => store, commit, ApiError, fetchImpl: naverFetch,
     config: naverConfig || { clientId: process.env.NAVER_CLIENT_ID, clientSecret: process.env.NAVER_CLIENT_SECRET, callbackUrl: process.env.NAVER_CALLBACK_URL, encryptionKey: process.env.NAVER_TOKEN_ENCRYPTION_KEY },
@@ -212,8 +223,7 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
     res.setHeader('X-Content-Type-Options','nosniff'); res.setHeader('Referrer-Policy','same-origin'); res.setHeader('X-Frame-Options','DENY');
     try {
       const host = req.headers.host || '';
-      const localHost = /^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(host);
-      if (!(cloud ? allowedHosts.includes(host) : localHost)) throw new ApiError(403,'허용되지 않은 접속 주소입니다.');
+      if (!(cloud ? allowedHosts.includes(host) : isLocalHost(host))) throw new ApiError(403,'허용되지 않은 접속 주소입니다.');
       const origin = `${cloud ? 'https' : 'http'}://${host}`;
       const url = new URL(req.url,origin), route = url.pathname, mutation = !['GET','HEAD','OPTIONS'].includes(req.method);
       if (mutation && ((cloud && !req.headers.origin) || (req.headers.origin && req.headers.origin !== origin))) throw new ApiError(403,'같은 앱 화면에서 다시 시도해주세요.');
@@ -291,10 +301,7 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
         }
         throw new ApiError(404,'요청한 기능을 찾을 수 없습니다.');
       }
-      const entry = STATIC.get(route);
-      if (!entry || !['GET','HEAD'].includes(req.method)) throw new ApiError(404,'페이지를 찾을 수 없습니다.');
-      const data = await fs.promises.readFile(path.join(__dirname,entry[0]));
-      res.writeHead(200,{'Content-Type':entry[1],'Cache-Control':'no-store'}); res.end(req.method === 'HEAD' ? undefined : data);
+      await sendStatic(req, res, route);
     } catch (error) {
       if (res.headersSent || res.destroyed) return;
       const status = error.status || (error.code === 'ENOENT' ? 404 : 500);
@@ -305,5 +312,8 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
   server.requestTimeout = 15_000; server.headersTimeout = 10_000;
   return server;
 }
-if (require.main === module) { const port = Number(process.env.PORT || 3000); createServer().listen(port,'127.0.0.1',() => console.log(`Local: http://localhost:${port}`)); }
-module.exports = { createServer, seedStore, makeUser, ApiError };
+module.exports = { createServer, seedStore, makeUser, ApiError, isLocalHost, sendStatic };
+if (require.main === module) {
+  const port = Number(process.env.PORT || 3000);
+  require('./local-server').createLocalServer().listen(port, '127.0.0.1', () => console.log(`Local: http://localhost:${port}`));
+}

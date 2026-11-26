@@ -85,14 +85,47 @@ GitHub의 `Jung-won-seok/Zone_Diet_Application` 저장소와 Vercel의 `zone-die
 
 `vercel.json`은 정적 화면과 Node.js API를 함께 배포합니다. 서버리스 실행 환경에서 로컬 파일 시스템에 기록을 저장하지 않습니다.
 
+기존 Blob 방식으로 시작할 때는 다음과 같이 설정합니다. PostgreSQL로 전환하는 순서는 아래에 있습니다.
+
 1. Vercel 프로젝트에 **Private Vercel Blob** 저장소를 연결합니다.
 2. `BLOB_READ_WRITE_TOKEN`과 `INITIAL_ACCOUNT_PASSWORDS`를 Production 환경변수에 설정합니다. `.env.example`에서 키 형식을 확인할 수 있습니다.
 3. 새 박스는 `INITIAL_ACCOUNT_PASSWORDS`에 `admin`의 8자 이상 비밀번호를 담은 JSON을 설정하고 첫 로그인 후 실제 회원을 등록합니다. 기존 데모 구성은 `admin`과 `member01`부터 `member20`까지의 초기 비밀번호를 모두 지정하면 생성됩니다.
 4. 이 설정은 빈 저장소의 첫 초기화에만 적용됩니다. 기존 저장소를 연결하면 회원·팀·식단과 네이버 연결을 그대로 사용합니다.
 
-온라인 사진·회원정보·세션은 비공개 Blob에 저장합니다. 요청마다 최신 상태를 읽고 ETag 조건부 쓰기로 동시 변경을 확인합니다. 사진은 앱의 로그인과 공개 범위를 확인한 뒤에만 제공합니다. 로컬 `.data/`나 계정 안내 파일은 배포 및 Git 대상에서 제외됩니다.
+기존 방식은 비공개 Blob에 사진과 앱 데이터를 저장하며 ETag로 동시 쓰기를 검사합니다. PostgreSQL 모드에서는 사진 원본만 같은 비공개 Blob에 보관합니다. 두 방식 모두 사진을 열 때 로그인과 공개 범위를 확인합니다.
 
-예약과 회원 정보는 기존 Blob에 함께 저장합니다. 동시 변경으로 저장본이 충돌하면 예약 화면에서 최신 현황을 확인한 뒤 다시 신청할 수 있습니다.
+### PostgreSQL 연결과 기존 데이터 이관
+
+박스 전용 PostgreSQL 또는 Supabase 프로젝트를 준비합니다. Supabase에서는 프로젝트의 **Connect**에서 서버리스용 트랜잭션 풀러 연결 주소를 복사합니다. 이관 도구와 서버는 비공개 `leben` 스키마를 사용합니다. 최초 설치와 앱 실행에는 해당 스키마와 테이블을 소유하는 서버 계정을 사용합니다. 연결 주소는 개발 시 `.env.local`, 배포 시 Vercel의 서버 환경변수 `LEBEN_DATABASE_URL`에 설정합니다. 원격 DB는 인증서를 검증합니다. 전용 CA가 필요한 경우 `LEBEN_DATABASE_CA`에 프로젝트의 CA 인증서를 설정합니다.
+
+예약 순서, 수업 정원, 회원권과 사용 이력은 별도 테이블에 저장합니다. 기본 주간 시간표는 앱의 기존 규칙을 사용하고, 예약이나 휴강·특강 설정이 생기면 해당 날짜의 수업을 DB에 기록합니다. 예약 변경과 횟수 차감·복구가 한 트랜잭션에서 확정됩니다. 기존 계정과 세션, WOD·식단 기록, 알림, 사진 참조도 함께 이관합니다. 횟수권 변경 이력의 시작 값은 이관 시점의 잔여 횟수입니다.
+
+**시험 이관**
+
+운영과 분리된 빈 DB에 연결하고, 기존 비공개 Blob의 `BLOB_READ_WRITE_TOKEN`을 이관 환경에 설정합니다. 백업에는 계정과 세션이 포함되므로 접근이 제한된 폴더에 저장합니다. 아래 예시는 PowerShell에서 실행합니다.
+
+```powershell
+New-Item -ItemType Directory -Force .data/migration | Out-Null
+npm run db -- backup .data/migration/trial.json
+npm run db -- schema
+npm run db -- dry-run .data/migration/trial.json
+npm run db -- import .data/migration/trial.json
+npm run db -- verify .data/migration/trial.json
+```
+
+`schema`는 새 스키마를 한 번 설치합니다. `dry-run`은 실제 제약 조건과 재조회 결과를 확인한 뒤 되돌립니다. `import`는 빈 대상에서만 실행되며, 원본의 대기 순서와 회원별 잔여 횟수를 포함해 모든 필드가 일치해야 커밋합니다. `verify`는 현재 DB를 백업과 다시 대조합니다. 원본이 로컬 파일이면 첫 명령 대신 `npm run db -- backup-local .data/store.json .data/migration/trial.json`을 사용합니다. 사진 원본은 이 백업에 포함되지 않으므로 기존 비공개 Blob을 유지하고 사진 파일도 별도로 백업합니다.
+
+로컬에서는 시험 DB를 가리킨 상태로 `LEBEN_STORE=postgres`를 설정한 뒤 `npm start`로 로그인과 예약을 확인합니다. 운영 Blob과 연결된 상태에서 사진 쓰기·삭제를 시험하면 운영 사진에 영향을 줄 수 있으므로 사진 시험에는 별도의 Blob이나 로컬 사진 폴더를 사용합니다. 로컬 실행에서 Blob 토큰을 비우면 사진은 `.data/media/`를 사용합니다.
+
+**운영 전환**
+
+1. 새 코드를 먼저 기존 저장 방식으로 배포하고, 점검 전에 레벤 전용 운영 DB에 `schema`를 한 번 실행합니다. 시험 데이터를 넣었던 DB는 시험용으로 유지합니다.
+2. 기존 운영 도메인에 `LEBEN_MAINTENANCE=1`을 적용해 재배포합니다. API에서 503을 확인하고, 이전 배포 주소와 쓰기 작업도 차단한 뒤 진행 중인 요청이 끝날 때까지 기다립니다.
+3. `backup .data/migration/final.json`으로 최종 백업을 새로 만듭니다. 운영 DB를 대상으로 `dry-run`, `import`, `verify`를 같은 파일에 순서대로 실행합니다. 전체 대조를 마친 뒤에 서비스를 엽니다.
+4. Vercel Production에 검증한 `LEBEN_DATABASE_URL`과 `LEBEN_STORE=postgres`를 설정하고 점검 설정을 해제해 재배포합니다. 기존 Blob 토큰과 네이버 암호화 키는 유지합니다. 코치·회원 로그인을 확인하고 테스트 회원으로 예약·취소 시 명단과 잔여 횟수를 확인합니다.
+5. 새 DB에서 첫 쓰기가 발생하기 전까지는 점검 상태에서 기존 Blob 방식으로 되돌릴 수 있습니다. 이후에는 다시 쓰기를 중지하고 PostgreSQL의 최신 변경을 복구에 포함해야 합니다. 운영 DB 자체의 정기 백업과 복원 시험도 설정합니다.
+
+동시 예약 통합 테스트는 임시 DB를 생성할 수 있는 테스트 계정으로 `LEBEN_TEST_DATABASE_URL`을 설정한 뒤 `npm test`로 실행합니다. 테스트가 직접 생성한 임시 DB만 정리합니다. GitHub의 풀 리퀘스트와 `main` 푸시에서는 별도 PostgreSQL 17 컨테이너로 이 테스트를 실행하도록 설정했습니다.
 
 ## 네이버 카페 연결 설정
 
