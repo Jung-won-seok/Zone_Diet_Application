@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const MobileNavigation = require('../mobile-nav');
+const MobileNavigation = require('../client/app/mobile-nav');
 
 class Events {
   constructor() { this.listeners = new Map(); }

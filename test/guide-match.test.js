@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { readFileSync } = require('node:fs');
+const { readPublicAsset } = require('./support/public-assets');
 const vm = require('node:vm');
 
 const catalog = [
@@ -16,8 +16,8 @@ const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, char =>
 
 function loadUI(overrides = {}) {
   const context = vm.createContext({ guideEntries: () => catalog, escapeHTML, URLSearchParams, ...overrides });
-  for (const file of ['../guide-match', '../wod']) {
-    vm.runInContext(readFileSync(require.resolve(file), 'utf8'), context);
+  for (const file of ['guide-match.js', 'wod.js']) {
+    vm.runInContext(readPublicAsset(file), context);
   }
   return context;
 }
@@ -43,7 +43,7 @@ test('와드 본문은 긴 동작명, 복수형, 붙여 쓴 횟수와 조사를 
 });
 
 test('새 네임드 와드는 영문과 한글 별칭으로 같은 항목을 찾고 와드 본문에서도 연결된다', () => {
-  const entries = require('../guide-benchmarks').map(entry => ({ ...entry, category: 'benchmark' }));
+  const entries = require('../shared/guide-benchmarks').map(entry => ({ ...entry, category: 'benchmark' }));
   const ui = loadUI({ guideEntries: () => entries });
   const names = [
     ['angie', '엔지'], ['elizabeth', '엘리자벳'], ['mary', '메리'], ['kelly', '캘리'], ['eva', '에바'],

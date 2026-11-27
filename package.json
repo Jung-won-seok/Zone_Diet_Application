@@ -4,13 +4,13 @@
   "private": true,
   "description": "크로스핏 레벤 수업 예약, 박스 회원 관리, 존다 프로그램",
   "scripts": {
-    "start": "node --env-file-if-exists=.env.local server.js",
-    "check": "node --check public-assets.js && node --check reservations.js && node --check reservations-server.js && node --check member-management.js && node --check members-server.js && node --check app.js && node --check mobile-nav.js && node --check admin.js && node --check meals.js && node --check server.js && node --check meals-server.js && node --check cloud-storage.js && node --check api/handler.js && node --check meal-summary.js && node --check cafe-draft.js && node --check naver-auth.js && node --check naver-cafe.js && node --check naver-onboarding.js && node --check naver-ui.js && node --check recovery.js && node --check notifications.js && node --check notifications-server.js && node --check push-worker.js && node --check wod.js && node --check wod-server.js && node --check schedule-server.js && node --check schedule-ui.js && node --check memberships-server.js && node --check guide-movements.js && node --check guide-benchmarks.js && node --check guide-terms.js && node --check guide-match.js && node --check guide.js && npm run check:motion && npm run check:db",
-    "check:motion": "node --check motion-strength.js && node --check motion-bodyweight.js && node --check motion-equipment.js && node --check motion-muscle-ups.js && node --check motion-timeline.js && node --check motion-renderer.js && node --check motion-muscles.js && node --check motion-muscle-view.js && node --check motion-3d-model.js && node --check motion-3d-renderer.js && node --check motion-3d-controls.js && node --check motion-player.js",
+    "start": "node --env-file-if-exists=.env.local --env-file-if-exists=config/.env.local server/index.js",
+    "check": "node scripts/check.js",
+    "check:motion": "node scripts/check.js client/guide/motion",
     "test": "node --test test/*.test.js",
     "build": "node scripts/build.js",
-    "db": "node --env-file-if-exists=.env.local scripts/migrate-postgres.js",
-    "check:db": "node --check local-server.js && node --check storage-mode.js && node --check db/pool.js && node --check db/rows.js && node --check db/store.js && node --check scripts/migrate-postgres.js"
+    "db": "node --env-file-if-exists=.env.local --env-file-if-exists=config/.env.local scripts/migrate-postgres.js",
+    "check:db": "node scripts/check.js server/local.js server/storage server/db scripts/migrate-postgres.js"
   },
   "dependencies": {
     "@vercel/blob": "^2.8.2",

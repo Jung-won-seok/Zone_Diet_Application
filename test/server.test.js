@@ -58,8 +58,29 @@ test('회원 로그인, 팀 권한, 역할 배정과 데이터 보존', async t 
     const visitor = client();
     assert.deepEqual((await visitor.request('/api/session')).data, { user: null });
     assert.equal((await visitor.request('/api/bootstrap')).status, 401);
-    for (const route of ['/demo-accounts.txt', '/.data/store.json', '/backend.js', '/server.js']) {
+    for (const route of ['/demo-accounts.txt', '/.data/store.json', '/backend.js', '/server.js',
+      '/server/index.js', '/server/db/schema.sql', '/config/public-assets.js', '/config/.env.example', '/.env.local']) {
       assert.equal((await visitor.request(route)).status, 404, route);
+    }
+  });
+
+  await t.test('public URLs serve the allowlisted client and shared files from their source directories', async () => {
+    const assets = require('../config/public-assets');
+    const home = await fetch(base + '/');
+    assert.equal(home.status, 200);
+    const html = await home.text();
+    assert.equal(html, await fs.readFile(path.join(__dirname, '..', assets['index.html']), 'utf8'));
+    for (const [, link] of html.matchAll(/(?:src|href)="([^"]+)"/g)) {
+      const url = new URL(link, base);
+      if (url.origin === base && url.pathname !== '/') assert.ok(Object.hasOwn(assets, url.pathname.slice(1)), link);
+    }
+    for (const [filename, source] of Object.entries(assets)) {
+      assert.equal(path.basename(filename), filename);
+      assert.match(source, /^(client|shared)\//);
+      const response = await fetch(base + '/' + filename);
+      assert.equal(response.status, 200, filename);
+      const expected = await fs.readFile(path.join(__dirname, '..', source));
+      assert.deepEqual(Buffer.from(await response.arrayBuffer()), expected, filename);
     }
   });
 

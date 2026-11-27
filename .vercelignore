@@ -2,6 +2,7 @@
 .data
 node_modules
 .env*
+**/.env*
 demo-accounts.txt
 deployment-accounts.txt
 *-preview.png

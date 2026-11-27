@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const M = require('../meal-summary');
+const M = require('../shared/meal-summary');
 const photo='/api/media/'+'a'.repeat(32);
 const entry=(meal,blocks,extra={})=>({memberId:'u01',date:'2026-05-10',meal,blocks,...extra});
 const draft=posts=>M.buildDraft({date:'2026-05-10',startDate:'2026-04-21',memberId:'u01',name:'김민준',posts});

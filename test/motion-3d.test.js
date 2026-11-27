@@ -1,13 +1,13 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createHash } = require('node:crypto');
-const fs = require('node:fs');
+const { readPublicAsset } = require('./support/public-assets');
 const vm = require('node:vm');
 
 const scene = vm.createContext({ window: { devicePixelRatio: 1 } });
 for (const file of ['guide-movements', 'motion-strength', 'motion-equipment', 'motion-bodyweight', 'motion-muscle-ups',
   'motion-timeline', 'motion-muscles', 'motion-3d-model', 'motion-3d-renderer']) {
-  vm.runInContext(fs.readFileSync(require.resolve('../' + file), 'utf8'), scene);
+  vm.runInContext(readPublicAsset(file + '.js'), scene);
 }
 const ids = vm.runInContext('guideMovements.map(entry => entry.id)', scene);
 const build = vm.runInContext('buildMovementScene3D', scene);

@@ -1,7 +1,7 @@
 const { randomUUID } = require('node:crypto');
 
-const { CAPACITY, seoulCalendar, scheduleDay, weekOverrides, getClassCapacity, prepareScheduleChange } = require('./schedule-server');
-const { membershipView, membershipIssue, chargeVisit, refundVisit } = require('./memberships-server');
+const { CAPACITY, seoulCalendar, scheduleDay, weekOverrides, getClassCapacity, prepareScheduleChange } = require('./schedule');
+const { membershipView, membershipIssue, chargeVisit, refundVisit } = require('./memberships');
 
 function bookingOpensAt(date) {
   const previousDay = new Date(`${date}T00:00:00Z`);

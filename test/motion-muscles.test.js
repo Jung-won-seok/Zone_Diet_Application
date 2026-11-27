@@ -1,11 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
+const { readPublicAsset } = require('./support/public-assets');
 const vm = require('node:vm');
 
 const simulation = vm.createContext({});
 for (const file of ['motion-strength', 'motion-equipment', 'motion-bodyweight', 'motion-muscle-ups', 'motion-timeline', 'motion-muscles']) {
-  vm.runInContext(fs.readFileSync(require.resolve('../' + file), 'utf8'), simulation);
+  vm.runInContext(readPublicAsset(file + '.js'), simulation);
 }
 const regionLabels = vm.runInContext('movementMuscleLabels', simulation);
 const motions = vm.runInContext('movementMotions', simulation);

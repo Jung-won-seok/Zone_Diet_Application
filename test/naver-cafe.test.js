@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const {createNaverCafe} = require('../naver-cafe');
+const {createNaverCafe} = require('../server/naver/naver-cafe');
 class ApiError extends Error {constructor(status,message){super(message);this.status=status;}}
 const DATE='2026-05-10', KEY=`program-1|u01|${DATE}`;
 const A='a'.repeat(32),B='b'.repeat(32),C='c'.repeat(32);

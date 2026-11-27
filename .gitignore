@@ -2,12 +2,9 @@
 node_modules/
 .DS_Store
 *.log
-.vercel
-.env*
-
 .vercel/
 .env*
-!.env.example
+!config/.env.example
 demo-accounts.txt
 deployment-accounts.txt
 *-preview.png

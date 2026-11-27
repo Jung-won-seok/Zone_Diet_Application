@@ -1,6 +1,6 @@
 const { createServer } = require('../server');
-const { createCloudContext } = require('../cloud-storage');
-const { checkMaintenance } = require('../storage-mode');
+const { createCloudContext } = require('../server/storage/cloud-storage');
+const { checkMaintenance } = require('../server/storage/storage-mode');
 
 module.exports = async function handler(req, res) {
   res.setHeader('Cache-Control', 'private, no-store');

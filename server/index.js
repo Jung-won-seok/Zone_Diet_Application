@@ -2,26 +2,29 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { createMealService } = require('./meals-server');
-const { createNaverAuth } = require('./naver-auth');
-const { createNaverCafe } = require('./naver-cafe');
-const { createNaverOnboarding } = require('./naver-onboarding');
-const { createReservationService } = require('./reservations-server');
-const { createBoxMemberService } = require('./members-server');
-const { createMembershipService } = require('./memberships-server');
-const { createNotificationService } = require('./notifications-server');
-const { createWodService } = require('./wod-server');
-const publicAssets = require('./public-assets');
+const { createMealService } = require('./services/meals');
+const { createNaverAuth } = require('./naver/naver-auth');
+const { createNaverCafe } = require('./naver/naver-cafe');
+const { createNaverOnboarding } = require('./naver/naver-onboarding');
+const { createReservationService } = require('./services/reservations');
+const { createBoxMemberService } = require('./services/members');
+const { createMembershipService } = require('./services/memberships');
+const { createNotificationService } = require('./services/notifications');
+const { createWodService } = require('./services/wod');
+const publicAssets = require('../config/public-assets');
 const CORE_ROLES = ['diet', 'leader', 'mission', 'sns'];
 const SESSION_AGE = 8 * 60 * 60 * 1000;
 const assetTypes = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.webp': 'image/webp' };
-const STATIC = new Map(publicAssets.map(file => ['/' + file, [file, assetTypes[path.extname(file)]]]));
+const projectRoot = path.resolve(__dirname, '..');
+const STATIC = new Map(Object.entries(publicAssets).map(([filename, source]) => [
+  '/' + filename, [path.join(projectRoot, source), assetTypes[path.extname(filename)]],
+]));
 STATIC.set('/', STATIC.get('/index.html'));
 const isLocalHost = host => /^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(host);
 async function sendStatic(req, res, route) {
   const entry = STATIC.get(route);
   if (!entry || !['GET', 'HEAD'].includes(req.method)) throw new ApiError(404, '페이지를 찾을 수 없습니다.');
-  const data = await fs.promises.readFile(path.join(__dirname, entry[0]));
+  const data = await fs.promises.readFile(entry[0]);
   res.writeHead(200, {
     'Content-Type': entry[1], 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
     'Referrer-Policy': 'same-origin', 'X-Frame-Options': 'DENY',
@@ -98,7 +101,7 @@ function validateAssignments(body, store) {
     return { id: row.id, teamId: row.teamId, role: row.role, customRole };
   });
 }
-function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '.data'), initialStore, persistStore, mediaStorage, cloud = false, sharedSessions = cloud, allowedHosts = [], naverConfig, naverFetch = globalThis.fetch } = {}) {
+function createServer({ dataDir = process.env.DATA_DIR || path.join(projectRoot, '.data'), initialStore, persistStore, mediaStorage, cloud = false, sharedSessions = cloud, allowedHosts = [], naverConfig, naverFetch = globalThis.fetch } = {}) {
   if (!initialStore) fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
   const storePath = path.join(dataDir, 'store.json');
   function persist(next) {
@@ -315,5 +318,5 @@ function createServer({ dataDir = process.env.DATA_DIR || path.join(__dirname, '
 module.exports = { createServer, seedStore, makeUser, ApiError, isLocalHost, sendStatic };
 if (require.main === module) {
   const port = Number(process.env.PORT || 3000);
-  require('./local-server').createLocalServer().listen(port, '127.0.0.1', () => console.log(`Local: http://localhost:${port}`));
+  require('./local').createLocalServer().listen(port, '127.0.0.1', () => console.log(`Local: http://localhost:${port}`));
 }

@@ -1,7 +1,7 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const crypto=require('node:crypto');
-const {createNaverAuth}=require('../naver-auth');
+const {createNaverAuth}=require('../server/naver/naver-auth');
 const hash=value=>crypto.createHash('sha256').update(value).digest('hex');
 class ApiError extends Error {constructor(status,message){super(message);this.status=status;}}
 const BASE='https://app.example.test';

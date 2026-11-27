@@ -1,6 +1,6 @@
 const http = require('node:http');
-const { createServer, ApiError, isLocalHost, sendStatic } = require('./server');
-const { getStoreMode, checkMaintenance } = require('./storage-mode');
+const { createServer, ApiError, isLocalHost, sendStatic } = require('./index');
+const { getStoreMode, checkMaintenance } = require('./storage/storage-mode');
 
 function createLocalServer() {
   const mode = getStoreMode('local');
@@ -17,7 +17,7 @@ function createLocalServer() {
       const request = { cookie: req.headers.cookie };
       const context = mode === 'postgres' && !process.env.BLOB_READ_WRITE_TOKEN
         ? await require('./db/store').createPostgresContext(require('./db/pool').getPool(), request)
-        : await require('./cloud-storage').createCloudContext(request);
+        : await require('./storage/cloud-storage').createCloudContext(request);
       const app = createServer({ ...context, sharedSessions: true });
       await app.listeners('request')[0](req, res);
     } catch (error) {

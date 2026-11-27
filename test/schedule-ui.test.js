@@ -1,9 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
+const { readPublicAsset } = require('./support/public-assets');
 const vm = require('node:vm');
 
-const source = fs.readFileSync(require.resolve('../schedule-ui'), 'utf8');
+const source = readPublicAsset('schedule-ui.js');
 
 function element() {
   const children = new Map();

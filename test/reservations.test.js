@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createReservationService } = require('../reservations-server');
+const { createReservationService } = require('../server/services/reservations');
 
 const MONDAY = '2026-11-30';
 const CLASS = '09:40';

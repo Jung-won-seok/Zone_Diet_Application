@@ -1,4 +1,4 @@
-const { scheduleDay, CAPACITY, WAITLIST_CAPACITY } = require('../schedule-server');
+const { scheduleDay, CAPACITY, WAITLIST_CAPACITY } = require('../services/schedule');
 
 function table(name, key, fields, json = []) {
   return { name, key, columns: [...key, ...fields], json };

@@ -2,7 +2,7 @@ const { createHash } = require('node:crypto');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { isDeepStrictEqual } = require('node:util');
-const { getClassCapacity } = require('../schedule-server');
+const { getClassCapacity } = require('../server/services/schedule');
 
 const format = 'leben-blob-backup-v1';
 const usage = [
@@ -86,7 +86,7 @@ async function readBackup(filename) {
 }
 
 async function installSchema(pool) {
-  const ddl = await fs.readFile(path.join(__dirname, '../db/schema.sql'), 'utf8');
+  const ddl = await fs.readFile(path.join(__dirname, '../server/db/schema.sql'), 'utf8');
   const client = await pool.connect();
   let discardConnection = false;
   try {
@@ -138,13 +138,13 @@ async function main(args) {
   }
   if (command === 'backup') {
     if (!process.env.BLOB_READ_WRITE_TOKEN) throw new MigrationError('Set BLOB_READ_WRITE_TOKEN for the source private Blob store.');
-    const { readLegacyBlobStore } = require('../cloud-storage');
+    const { readLegacyBlobStore } = require('../server/storage/cloud-storage');
     const summary = await backup(filename, await readLegacyBlobStore());
     console.log('Metadata archive saved and checksum verified.', JSON.stringify(summary));
     return;
   }
   const snapshot = schemaOnly ? null : await readBackup(filename);
-  const { getPool } = require('../db/pool');
+  const { getPool } = require('../server/db/pool');
   const pool = getPool();
   try {
     if (schemaOnly) {
@@ -152,7 +152,7 @@ async function main(args) {
       console.log('Club database schema installed.');
       return;
     }
-    const summary = await runDatabaseCommand(command, snapshot, pool, require('../db/store'));
+    const summary = await runDatabaseCommand(command, snapshot, pool, require('../server/db/store'));
     const messages = {
       'dry-run': 'Trial import verified and rolled back.',
       import: 'Import verified and committed.',

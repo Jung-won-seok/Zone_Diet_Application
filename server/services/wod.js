@@ -1,5 +1,5 @@
 const { randomUUID } = require('node:crypto');
-const guideBenchmarks = require('./guide-benchmarks');
+const guideBenchmarks = require('../../shared/guide-benchmarks');
 
 const seoulDate = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit'

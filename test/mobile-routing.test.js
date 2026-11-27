@@ -1,12 +1,12 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
+const { readPublicAsset } = require('./support/public-assets');
 const vm = require('node:vm');
 
-const source = fs.readFileSync(require.resolve('../app.js'), 'utf8');
+const source = readPublicAsset('app.js');
 const decode = value => String(value || '').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
 const attributes = html => Object.fromEntries([...html.matchAll(/([\w-]+)="([^"]*)"/g)].map(([, key, value]) => [key, decode(value)]));
-const shell = fs.readFileSync(require.resolve('../index.html'), 'utf8');
+const shell = readPublicAsset('index.html');
 const boxReturnAttributes = [...shell.matchAll(/<a\s+([^>]*)>/g)]
   .map(match => attributes(match[1])).find(link => link.class?.split(/\s+/).includes('box-return'));
 class Element {

@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createBoxMemberService } = require('../members-server');
+const { createBoxMemberService } = require('../server/services/members');
 const { ApiError } = require('../server');
 
 const accounts = '/api/admin/members';

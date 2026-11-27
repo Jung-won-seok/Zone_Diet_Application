@@ -1,5 +1,5 @@
 const { createHash, randomBytes, randomUUID } = require('node:crypto');
-const { membershipView } = require('./memberships-server');
+const { membershipView } = require('./memberships');
 
 const recoveryLifetime = 15 * 60 * 1000;
 const digestToken = token => createHash('sha256').update(token).digest('hex');

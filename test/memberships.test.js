@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { ApiError } = require('../server');
-const { createMembershipService, chargeVisit, refundVisit, membershipIssue, membershipView } = require('../memberships-server');
+const { createMembershipService, chargeVisit, refundVisit, membershipIssue, membershipView } = require('../server/services/memberships');
 
 const writePath = '/api/admin/members/membership';
 const coach = { id: 'admin', isAdmin: true };
