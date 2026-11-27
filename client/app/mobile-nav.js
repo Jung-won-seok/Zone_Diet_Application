@@ -5,7 +5,7 @@
 })(typeof window === 'undefined' ? globalThis : window, function () {
   'use strict';
 
-  const LINK_SELECTOR = 'nav a[data-page], .settings-link[data-page]';
+  const LINK_SELECTOR = 'nav a[data-page], nav button[data-page]';
   const INTERACTIVE_SELECTOR = 'a, button, input, textarea, select, label, summary, dialog, img, video, audio, canvas, iframe, [contenteditable]:not([contenteditable="false"]), [role="button"], [role="slider"], [data-no-swipe]';
   const AXIS_THRESHOLD = 10;
   const SWIPE_THRESHOLD = 60;
@@ -177,16 +177,16 @@
       }
       if (!gesture || gesture.id !== event.pointerId) return;
       const state = gesture;
+      if (!state.horizontal) { gesture = null; return; } // Let ordinary taps activate the control natively.
       const dx = event.clientX - state.x;
       const dy = event.clientY - state.y;
       const candidate = candidateFor(state, event);
-      const moved = state.horizontal;
-      const valid = moved && media.matches && !isBlocked() && Math.abs(dy) <= Math.max(28, Math.abs(dx) * 0.65)
+      const valid = media.matches && !isBlocked() && Math.abs(dy) <= Math.max(28, Math.abs(dx) * 0.65)
         && (state.kind === 'nav' || (Math.abs(dx) >= SWIPE_THRESHOLD && !selectedText()));
       cancel();
-      if (!moved) return; // Ordinary taps keep their native anchor/keyboard behavior.
       if (event.cancelable) event.preventDefault();
       if (!valid || !candidate || candidate === activeLink(visibleLinks()) || !root.contains(candidate)) return;
+      if (candidate.tagName === 'BUTTON') { candidate.click(); return; }
       const href = candidate.getAttribute('href');
       if (!href || href[0] !== '#') return;
       // Routing owns unsaved-change prompts. Always restore from actual active state.

@@ -100,6 +100,7 @@ function guideResultGroups(entries) {
 const guideListVisits = new Map();
 let lastGuideList = null;
 let stopTrackingGuideList = null;
+let lastGuideResults = null;
 
 function mountGuide() {
   const page = document.querySelector('#guide-page');
@@ -139,9 +140,16 @@ function mountGuide() {
     if (event.target.closest('a[href]')) saveEntry();
   }
   function update() {
-    const results = all.filter(item => (visit.category === 'all' || visit.category === item.category) && guideSearchMatches(item, visit.query));
-    page.querySelector('[data-guide-results]').innerHTML = guideResultGroups(results);
-    page.querySelector('[data-guide-count]').textContent = `검색 결과 ${results.length}개`;
+    const node = page.querySelector('[data-guide-results]');
+    const { category, query } = visit;
+    if (lastGuideResults?.owner === owner && lastGuideResults.category === category && lastGuideResults.query === query) {
+      if (node !== lastGuideResults.node) node.replaceWith(lastGuideResults.node);
+    } else {
+      const results = all.filter(item => (category === 'all' || category === item.category) && guideSearchMatches(item, query));
+      node.innerHTML = guideResultGroups(results);
+      lastGuideResults = { owner, category, query, node, count: results.length };
+    }
+    page.querySelector('[data-guide-count]').textContent = `검색 결과 ${lastGuideResults.count}개`;
     for (const filter of filters) filter.setAttribute('aria-pressed', String(filter.dataset.guideFilter === visit.category));
   }
   page.onclick = event => {
@@ -251,9 +259,11 @@ function removeGuideDialog(dialog) {
 function cleanupGuide() {
   if (stopTrackingGuideList) stopTrackingGuideList();
   stopTrackingGuideList = null;
+  if (lastGuideResults?.node.isConnected) lastGuideResults.node.remove();
   if (!session) {
     guideListVisits.clear();
     lastGuideList = null;
+    lastGuideResults = null;
   }
   const dialog = document.querySelector('.guide-dialog');
   if (dialog) removeGuideDialog(dialog);

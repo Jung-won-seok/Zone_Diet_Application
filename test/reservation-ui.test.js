@@ -7,6 +7,31 @@ const reservationSource = readPublicAsset('reservations.js');
 const ui = vm.createContext({ escapeHTML: value => String(value ?? '').replace(/[&<>]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[char])) });
 vm.runInContext(reservationSource, ui);
 
+test('the WOD preview and editor share one request only for the same session, date and freshness window', async () => {
+  const calls = [];
+  let clock = Date.parse('2026-11-27T03:00:00Z');
+  const ctx = vm.createContext({ session:{id:'a'}, csrfToken:'first', Date:class extends Date {
+    constructor(...args) { super(...(args.length ? args : [clock])); }
+    static now() { return clock; }
+  }, api(url) { calls.push(url); return Promise.resolve({query:url}); } });
+  vm.runInContext(reservationSource, ctx);
+  vm.runInContext(readPublicAsset('wod.js'), ctx);
+  const first = ctx.readWodDay();
+  assert.equal(ctx.readWodDay('2026-11-27'), first);
+  await first;
+  assert.equal(ctx.readWodDay(), first);
+  assert.notEqual(ctx.readWodDay(undefined, true), first);
+  ctx.csrfToken = 'second'; await ctx.readWodDay();
+  ctx.session = {id:'b'}; await ctx.readWodDay();
+  clock += 16000; await ctx.readWodDay();
+  await ctx.readWodDay('2026-11-26');
+  assert.deepEqual(calls, [...Array(5).fill('/api/wod'), '/api/wod?date=2026-11-26']);
+  ctx.api = async () => { throw new Error('offline'); };
+  await assert.rejects(ctx.readWodDay(undefined, true), /offline/);
+  ctx.api = async () => 'retried';
+  assert.equal(await ctx.readWodDay(), 'retried');
+});
+
 function slot(changes = {}) {
   return {
     startTime: '09:40', endTime: '10:30', capacity: 18, waitlistCapacity: 2,
@@ -14,6 +39,45 @@ function slot(changes = {}) {
     notOpenYet: false, closed: false, ...changes
   };
 }
+
+test('returning members see the last schedule while actions wait for the live response', async () => {
+  const requests = [];
+  const host = {parentElement:{querySelector:() => ({})}};
+  const ctx = vm.createContext({
+    session:{id:'member'}, csrfToken:'first', AbortController, clearTimeout,
+    document:{querySelector:()=>host, addEventListener(){}, removeEventListener(){}},
+    window:{matchMedia:()=>({addEventListener(){}, removeEventListener(){}})},
+    api(url, options) {
+      return new Promise((resolve, reject) => requests.push({url, signal:options.signal, resolve, reject}));
+    }
+  });
+  vm.runInContext(reservationSource, ctx);
+  vm.runInContext('paintReservationDay = () => {}; scheduleReservationRefresh = () => {}', ctx);
+  const day = vm.runInContext('bookingKoreaDate.format(new Date())', ctx);
+  const data = {date:day, today:day, classes:[]};
+  const current = () => vm.runInContext('reservationPage', ctx);
+  const initial = ctx.mountReservations(day);
+  requests[0].resolve(data); await initial;
+  const returning = ctx.mountReservations(day);
+  assert.equal(current().data, data);
+  assert.equal(current().showingSnapshot, true);
+  await ctx.changeReservation(current(), {});
+  assert.equal(requests.length, 2);
+  const newest = ctx.mountReservations(day);
+  assert.equal(requests[1].signal.aborted, true);
+  requests[1].resolve({...data, obsolete:true}); await returning;
+  assert.equal(current().data, data);
+  requests[2].reject(new Error('offline')); await newest;
+  assert.equal(current().data, null);
+  assert.equal(current().error, 'offline');
+  const retry = ctx.mountReservations(day);
+  assert.equal(current().data, null);
+  requests[3].resolve(data); await retry;
+  ctx.csrfToken = 'second';
+  const relogin = ctx.mountReservations(day);
+  assert.equal(current().data, null);
+  requests[4].resolve(data); await relogin;
+});
 
 test('a future class can be browsed before bookings open at Korean midnight', () => {
   const row = slot({ notOpenYet: true });

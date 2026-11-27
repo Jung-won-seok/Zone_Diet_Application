@@ -25,9 +25,48 @@
 .topbar:has(.box-return:not([hidden])) .profile { margin-left: auto; }
 .sidebar .nav-mobile-label,
 .sidebar .mobile-nav-indicator,
-.sidebar nav a.mobile-box-link,
-.zonda-subnav {
+.zonda-subnav[hidden] {
   display: none;
+}
+.sidebar .zonda-toggle {
+  position: relative;
+  display: flex;
+  align-items: center;
+  text-align: start;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
+}
+.zonda-toggle::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  margin-left: auto;
+  border: solid currentColor;
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+.zonda-toggle[aria-expanded="true"]::after { transform: rotate(225deg); }
+.zonda-subnav:not([hidden]) { display: grid; }
+.zonda-subnav a {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  color: #e8eee8;
+  font-size: 13px;
+  font-weight: 600;
+}
+.zonda-subnav a[aria-current] { color: var(--lime); }
+@media (min-width: 581px) {
+  .zonda-subnav {
+    gap: 2px;
+    margin: 3px 0 8px 23px;
+    padding-left: 12px;
+    border-left: 1px solid #58655e;
+  }
+  .zonda-subnav a { min-height: 36px; padding: 5px 12px; border-radius: 8px; }
+  .zonda-subnav a:hover, .zonda-subnav a[aria-current] { background: #304137; }
 }
 
 .sidebar .nav-icon {
@@ -98,20 +137,21 @@
     display: flex;
     flex: 1 1 0;
   }
-  body.in-box .sidebar nav a, body.in-zonda .sidebar nav a.mobile-box-link { flex: 1 1 0; }
-  body.in-zonda .sidebar nav a.desktop-program-link, body.in-zonda .sidebar .settings-link { display: none; }
-  body.in-zonda .sidebar nav a.mobile-box-link { display: flex; }
-
-  .in-zonda:not(.logged-out) .zonda-subnav:not([hidden]) {
-    display: grid;
+  body.in-box .sidebar nav > *, body.in-zonda .sidebar nav > * { flex: 1 1 0; }
+  .sidebar .zonda-toggle::after { position: absolute; top: 10px; right: 10px; transform: rotate(225deg); }
+  .sidebar .zonda-toggle[aria-expanded="true"]::after { transform: rotate(45deg); }
+  .zonda-subnav {
+    position: absolute;
+    inset: auto 0 calc(100% + 6px);
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 6px;
-    margin-top: 12px;
     padding: 10px;
     background: #202421;
     border-radius: var(--radius);
+    border: 1px solid #435248;
+    box-shadow: 0 6px 22px #13201933;
   }
-  .is-admin.in-zonda .zonda-subnav:not([hidden]) { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .is-admin .zonda-subnav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .zonda-subnav a {
     display: grid;
     place-items: center;
@@ -135,7 +175,7 @@
   }
   .zonda-subnav a:focus-visible { outline: 2px solid var(--white); outline-offset: 2px; }
 
-  body .sidebar nav a,
+  body .sidebar nav :is(a, button),
   body .sidebar .settings-link {
     position: relative;
     z-index: 1;
@@ -165,7 +205,7 @@
     flex: 1 1 0;
   }
 
-  body.is-pending-member .sidebar nav a {
+  body.is-pending-member .sidebar nav :is(a, button) {
     flex-direction: column;
     gap: 4px;
   }
@@ -192,7 +232,7 @@
     line-height: 1;
   }
 
-  body .sidebar nav a.active,
+  body .sidebar nav :is(a, button).active,
   body .sidebar .settings-link.active {
     background: #e7f0da;
     color: var(--green);
@@ -214,7 +254,7 @@
     transition: transform 220ms cubic-bezier(.2, .8, .2, 1), width 220ms ease;
   }
 
-  body .sidebar.has-nav-indicator nav a.active,
+  body .sidebar.has-nav-indicator nav :is(a, button).active,
   body .sidebar.has-nav-indicator .settings-link.active {
     background: transparent;
   }
@@ -223,19 +263,19 @@
     transition: none;
   }
 
-  body .sidebar.is-dragging nav a,
+  body .sidebar.is-dragging nav :is(a, button),
   body .sidebar.is-dragging .settings-link {
     color: #707c74;
     cursor: grabbing;
   }
 
-  body .sidebar.is-dragging nav a.drag-preview,
+  body .sidebar.is-dragging nav :is(a, button).drag-preview,
   body .sidebar.is-dragging .settings-link.drag-preview {
     color: var(--green);
     font-weight: 700;
   }
 
-  body .sidebar nav a:focus-visible,
+  body .sidebar nav :is(a, button):focus-visible,
   body .sidebar .settings-link:focus-visible {
     outline: 2px solid var(--green);
     outline-offset: -3px;
@@ -268,13 +308,9 @@
   }
 }
 
-@media (max-width: 350px) {
-  .is-admin.in-zonda .zonda-subnav:not([hidden]) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-
 @media (max-width: 580px) and (prefers-reduced-motion: reduce) {
   body .sidebar.has-nav-indicator .mobile-nav-indicator,
-  body .sidebar nav a,
+  body .sidebar nav :is(a, button),
   body .sidebar .settings-link {
     transition: none;
   }

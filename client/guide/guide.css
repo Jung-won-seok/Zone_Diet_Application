@@ -113,6 +113,9 @@
 .guide-movement-row { --guide-surface: #29312f; --guide-muted: #d6ded8; --guide-accent: #dbedcf; }
 .guide-term-row { --guide-surface: #e9ede7; --guide-muted: #465247; --guide-accent: #375133; color: #182219; }
 .guide-row.guide-movement-row { min-height: 103px; }
+.guide-group li { content-visibility: auto; contain-intrinsic-block-size: auto 132px; }
+.guide-group li:focus-within { content-visibility: visible; }
+.guide-group li:has(.guide-movement-row) { contain-intrinsic-block-size: auto 103px; }
 .guide-artwork {
   position: absolute;
   z-index: -1;
