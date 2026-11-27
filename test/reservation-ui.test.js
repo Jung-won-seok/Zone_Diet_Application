@@ -73,6 +73,31 @@ test('member rows hide the roster and admins can see the reserve and wait lists'
   assert.doesNotMatch(adminRow, /data-book-action/);
 });
 
+test('weekly is the default and only visible attendance counts, including across a year boundary', () => {
+  const page = { date:'2027-01-01', today:'2027-01-01', data:{attendedDates:['2026-12-28','2026-12-31','2027-01-01','2027-01-25']} };
+  const week = ui.bookingCalendar(page);
+  assert.match(week, /data-calendar-mode="week" aria-pressed="true"/);
+  assert.equal((week.match(/class="booking-day"/g) || []).length, 7);
+  assert.match(week, /주간 출석 <strong>3일/);
+  const month = ui.bookingCalendar({...page, calendarMode:'month'});
+  assert.match(month, /data-calendar-mode="month" aria-pressed="true"/);
+  assert.equal((month.match(/class="booking-day"/g) || []).length, 31);
+  assert.match(month, /1월 출석 <strong>2일/);
+  assert.match(month, /href="#reservations\/2027-01-25" aria-label="[^"]*월요일[^"]*와드 출석/);
+  assert.doesNotMatch(month, /class="booking-day" href="#reservations\/2026-12/);
+  assert.match(month, /href="#reservations\/2026-12-01" class="booking-arrow" aria-label="이전 달"/);
+});
+
+test('monthly navigation clamps to month end and aligns leap day under Tuesday', () => {
+  assert.equal(ui.shiftBookingMonth('2028-03-31', -1), '2028-02-29');
+  assert.equal(ui.shiftBookingMonth('2027-01-31', 1), '2027-02-28');
+  assert.equal(ui.shiftBookingMonth('2026-12-31', 1), '2027-01-31');
+  const month = ui.bookingCalendar({calendarMode:'month',date:'2028-02-29',today:'2028-02-29'});
+  assert.equal((month.match(/class="booking-day"/g) || []).length, 29);
+  assert.match(month, /일<\/span><span aria-hidden="true"><\/span><a class="booking-day" href="#reservations\/2028-02-01"/);
+  assert.match(month, /2028-02-29" aria-label="[^"]*화요일 오늘" aria-current="date"/);
+});
+
 test('the week distinguishes a holiday closure, a weekend special and a day without exceptions', () => {
   const calendar = ui.bookingCalendar({ date: '2027-01-01', today: '2026-12-31',
     data: { weekOverrides: { '2027-01-01': 'closed', '2027-01-02': 'special' } } });
@@ -81,6 +106,20 @@ test('the week distinguishes a holiday closure, a weekend special and a day with
   assert.match(calendarLink('2027-01-02'), /특별/);
   assert.doesNotMatch(calendarLink('2027-01-03'), /휴무|휴강|특별/);
   assert.match(calendar, /#reservations\/2026-12-28/);
+});
+
+test('a visible calendar refreshes at the member’s next class end even when another day is selected', () => {
+  const page = { date:'2026-11-01', data:{date:'2026-11-01', classes:[], attendanceRefreshAfterMs:500} };
+  let timer, refreshed;
+  const context = vm.createContext({
+    page, clearTimeout(){}, setTimeout(fn, delay){timer = {fn, delay};}, document:{hidden:false},
+    refresh(value){refreshed = value;}
+  });
+  vm.runInContext(reservationSource, context);
+  vm.runInContext('reservationPage = page; loadReservationDay = refresh; scheduleReservationRefresh(page)', context);
+  assert.equal(timer.delay, 600);
+  timer.fn();
+  assert.equal(refreshed, page);
 });
 
 test('members can read a closure reason and special capacity in place of ordinary booking actions', () => {

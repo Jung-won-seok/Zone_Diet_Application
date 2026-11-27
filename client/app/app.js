@@ -250,7 +250,7 @@ function render() {
   mobileNavigation.cancel();
   cleanupMeals();
   cleanupNaverUI();
-  cleanupReservations();
+  const previousCalendarMode = cleanupReservations();
   cleanupBookingNotifications();
   cleanupGuide();
   cleanupBoxMembers();
@@ -296,7 +296,7 @@ function render() {
   app.innerHTML = views[page]();
   if (page === 'profile') mountProfile();
   if (page === 'reservations') {
-    mountReservations(date);
+    mountReservations(date, previousCalendarMode);
     mountWodPreview(date);
     if (!session.isAdmin) mountBookingNotifications();
   }

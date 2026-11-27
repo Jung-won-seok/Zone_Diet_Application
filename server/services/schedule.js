@@ -36,20 +36,6 @@ function scheduleDay(store, date, instant) {
   };
 }
 
-function weekOverrides(store, date, instant) {
-  const result = {};
-  const day = new Date(date + 'T00:00:00Z');
-  day.setUTCDate(day.getUTCDate() - (day.getUTCDay() + 6) % 7);
-  for (let i = 0; i < 7; i++, day.setUTCDate(day.getUTCDate() + 1)) {
-    const key = day.toISOString().slice(0, 10);
-    if (!store.classSchedules?.[key]) continue;
-    const schedule = scheduleDay(store, key, instant);
-    if (schedule.dayClosed || (schedule.classes.length && schedule.classes.every(slot => slot.cancelled))) result[key] = 'closed';
-    else if (schedule.classes.some(slot => slot.kind === 'special' && !slot.cancelled)) result[key] = 'special';
-  }
-  return result;
-}
-
 function getClassCapacity(store, date, startTime) {
   return store.classSchedules?.[date]?.specials?.find(slot => slot.startTime === startTime)?.capacity ?? CAPACITY;
 }
@@ -133,4 +119,4 @@ function prepareScheduleChange(store, body, instant, ApiError) {
   return { settings, affected, reason };
 }
 
-module.exports = { CAPACITY, WAITLIST_CAPACITY, seoulCalendar, scheduleDay, weekOverrides, getClassCapacity, prepareScheduleChange };
+module.exports = { CAPACITY, WAITLIST_CAPACITY, seoulCalendar, scheduleDay, getClassCapacity, prepareScheduleChange };
