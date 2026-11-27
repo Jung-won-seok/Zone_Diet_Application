@@ -33,7 +33,7 @@ function fixture(hash = '#record/2026-11-10', {isAdmin = false, zondaParticipant
   const listeners={}, nodes=new Map(), links=[], localLinks=[], prompts=[], messages=[], calls=[];
   const flags={meal:false,naver:false,admin:false,boxMember:false,wod:false,answer:false};
   const location={hash,pathname:'/',search:''};
-  const user = {id: isAdmin ? 'admin' : 'u01', name: '김민준', isAdmin, pendingApproval};
+  const user = {id: isAdmin ? 'admin' : 'u01', username: pendingApproval ? '' : isAdmin ? 'admin' : 'member01', name: '김민준', isAdmin, pendingApproval};
   const personal = {settings:{name:'김민준',startWeight:'',goalWeight:''},records:{}};
   const account = {user,zondaParticipant,personal,personalRevision:0,program:{name:'존다'},photoMealCounts:{}};
   let form=null, initial=true, response=async()=>account;
@@ -50,9 +50,18 @@ function fixture(hash = '#record/2026-11-10', {isAdmin = false, zondaParticipant
       for (const [,attrs] of html.matchAll(/<a\s+([^>]*)>/g)) anchors.push(new Element(attributes(attrs)));
     }});
   }
-  Object.defineProperty(profile,'innerHTML',{set(){nodes.set('#logout-button',new Element());}});
   Object.defineProperty(app,'innerHTML',{set(html){
     app.markup = html;
+    for (const id of ['logout-button', 'profile-membership']) {
+      const key = '#' + id;
+      if (nodes.has(key)) nodes.get(key).isConnected = false;
+      nodes.delete(key);
+      if (html.includes('id="' + id + '"')) {
+        const element = new Element();
+        element.isConnected = true;
+        nodes.set(key, element);
+      }
+    }
     for(const key of [...nodes.keys()])if(key.startsWith('#form-')||['#record-form','#settings-form','#record-date'].includes(key))nodes.delete(key);
     form=null;
     const match=html.match(/<form\s+([^>]*)>([\s\S]*?)<\/form>/);
@@ -85,6 +94,7 @@ function fixture(hash = '#record/2026-11-10', {isAdmin = false, zondaParticipant
     mountWod(date){navState.wodDate=date;navState.wodMounts=(navState.wodMounts||0)+1;},
     restoreWodDate(){navState.restoredWodDate=navState.wodDate;}, cleanupWod(){flags.wod=false;},
     cleanupBookingNotifications(){}, mountBookingNotifications(){}, disableBookingPushOnLogout(){},
+    bookingMembershipCard:pass=>'회원권 ' + pass.kind, bookingKoreaDate:{format:()=>'2026-11-27'},
     mountBoxMembers(){}, mountReservations(date){navState.bookingDate=date;},
     confirmMealDiscard:()=>flags.mealPrompt?flags.mealPrompt.promise:Promise.resolve(flags.answer),
     resetAdminDraft(){flags.admin=false;},memberTeamBanner:()=>'',mealLoadingView:()=>'<div>식단</div>',
@@ -162,6 +172,49 @@ test('accepted personal discard switches page once and clears old-form dirty sta
   const f=fixture();f.field('workoutNote').value='미저장 운동';f.flags.answer=true;await f.navigate('#team');
   assert.equal(f.location.hash,'#team');assert.equal(f.active,'team');assert.equal(f.form,null);assert.equal(f.eval('personalIsDirty()'),false);assert.equal(f.prompts.length,1);
   await f.navigate('#team');assert.equal(f.prompts.length,1);assert.equal(f.eval('navigationPending'),false);
+});
+
+test('the header opens the signed-in member profile with the correct settings and return destination', async () => {
+  for (const zondaParticipant of [true, false]) {
+    const f = fixture('#reservations/2027-01-04', {zondaParticipant});
+    f.account.user.name = '회원<이름>';
+    f.setResponse(async () => ({kind:'visits'}));
+    const header = f.nodes.get('.profile');
+    assert.match(header.innerHTML, /href="#profile"/);
+    await f.navigate('#profile');
+    assert.match(header.innerHTML, /aria-current="page"/);
+    assert.match(f.markup, /회원&lt;이름&gt;/);
+    assert.match(f.markup, /<dd>member01<\/dd>/);
+    assert.match(f.markup, /id="booking-notifications"/);
+    assert.equal(f.markup.includes('href="#settings"'), zondaParticipant);
+    assert.ok(f.nodes.get('#logout-button').listeners.click);
+    assert.equal(f.body.classList.contains('in-zonda'), false);
+    assert.equal(f.boxReturn.getAttribute('href'), '#reservations/2027-01-04');
+    assert.deepEqual(f.calls.map(call=>call.url), ['/api/membership']);
+    await new Promise(setImmediate);
+    assert.equal(f.nodes.get('#profile-membership').innerHTML, '회원권 visits');
+  }
+});
+
+test('administrator and pending profiles offer their own settings without requesting member data', () => {
+  for (const pendingApproval of [false, true]) {
+    const f = fixture('#profile', {isAdmin:!pendingApproval, pendingApproval, zondaParticipant:false});
+    assert.match(f.markup, /<h1>내 정보<\/h1>/);
+    assert.match(f.markup, pendingApproval ? /<dd>승인 대기<\/dd>/ : /<dd>관리자<\/dd>/);
+    assert.match(f.markup, pendingApproval ? /href="#connect"/ : /href="#naver"/);
+    assert.match(f.markup, pendingApproval ? /<dd>네이버<\/dd>/ : /<dd>admin<\/dd>/);
+    assert.doesNotMatch(f.markup, /id="booking-notifications"|id="profile-membership"|href="#settings"/);
+    assert.equal(f.calls.length, 0);
+  }
+});
+
+test('opening the profile respects unsaved edits', async () => {
+  const f = fixture('#settings');
+  f.field('name').value = '새 이름';
+  await f.navigate('#profile');
+  assert.equal(f.location.hash, '#settings');
+  assert.equal(f.field('name').value, '새 이름');
+  assert.equal(f.prompts.length, 1);
 });
 
 test('booking is the default for box members and Zonda keeps previous participant bookmarks', async () => {
