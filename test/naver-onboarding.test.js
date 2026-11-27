@@ -1,7 +1,7 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {createNaverOnboarding}=require('../naver-onboarding');
-const {createNaverCafe}=require('../naver-cafe');
+const {createNaverOnboarding}=require('../server/naver/naver-onboarding');
+const {createNaverCafe}=require('../server/naver/naver-cafe');
 class ApiError extends Error {constructor(status,message){super(message);this.status=status;}}
 const CAFE={clubId:'31811778',url:'https://cafe.naver.com/mycaffelatte',name:'mycaffelatte'};
 const PUBLIC_CONNECTION=r=>({connected:Boolean(r?.encryptedTokens),displayName:r?.displayName||'',connectionId:r?.connectionId||null,connectedAt:r?.connectedAt||null,needsReconnect:Boolean(r?.needsReconnect)});

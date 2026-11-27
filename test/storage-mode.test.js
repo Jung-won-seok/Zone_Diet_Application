@@ -3,8 +3,8 @@ const assert = require('node:assert/strict');
 const { ServerResponse } = require('node:http');
 const Module = require('node:module');
 const { Client } = require('pg');
-const { getStoreMode, checkMaintenance } = require('../storage-mode');
-const { poolOptions } = require('../db/pool');
+const { getStoreMode, checkMaintenance } = require('../server/storage/storage-mode');
+const { poolOptions } = require('../server/db/pool');
 
 function isolateEnvironment(t, keys) {
   for (const key of keys) {
@@ -24,7 +24,7 @@ function mockBlobSdk(t, sdk) {
     return originalLoad.call(this, request, ...args);
   });
   // cloud-storage captures the SDK methods when first imported.
-  for (const id of ['../api/handler', '../cloud-storage']) {
+  for (const id of ['../api/handler', '../server/storage/cloud-storage']) {
     const filename = require.resolve(id);
     const previous = require.cache[filename];
     delete require.cache[filename];
@@ -113,7 +113,7 @@ test('backup only reads and the cloud HTTP entry point never falls back from a f
   // the actual storage selection, backup reader and application route.
   mockBlobSdk(t, sdk);
   t.mock.method(console, 'error', () => {});
-  const { readLegacyBlobStore } = require('../cloud-storage');
+  const { readLegacyBlobStore } = require('../server/storage/cloud-storage');
   const handler = require('../api/handler');
   const session = () => getRoute(handler, '/api/handler?route=session', { host: 'box.example.test' });
   await assert.rejects(readLegacyBlobStore(), { status: 503 });
@@ -156,7 +156,7 @@ test('PostgreSQL serves the signed-in user and private photo through the deploye
   };
   mockBlobSdk(t, sdk);
   const pool = {};
-  t.mock.method(require('../db/pool'), 'getPool', () => pool);
+  t.mock.method(require('../server/db/pool'), 'getPool', () => pool);
   const cookie = 'zonda_session=existing-session';
   const user = { id: 'user-a', username: 'a', name: 'A', isAdmin: false };
   const snapshot = {
@@ -164,7 +164,7 @@ test('PostgreSQL serves the signed-in user and private photo through the deploye
     media: { [id]: { memberId: user.id, mime: 'image/png' } },
     authState: { sessions: { 'existing-session': { userId: user.id, expires: Date.now() + 60000, csrfToken: 'csrf' } } },
   };
-  const context = t.mock.method(require('../db/store'), 'createPostgresContext', async (actualPool, request) => {
+  const context = t.mock.method(require('../server/db/store'), 'createPostgresContext', async (actualPool, request) => {
     assert.equal(actualPool, pool);
     assert.equal(request.cookie, cookie);
     return { initialStore: structuredClone(snapshot) };
@@ -182,7 +182,7 @@ test('PostgreSQL serves the signed-in user and private photo through the deploye
   assert.equal(context.mock.callCount(), 2);
 
   delete process.env.BLOB_READ_WRITE_TOKEN;
-  const local = require('../local-server').createLocalServer();
+  const local = require('../server/local').createLocalServer();
   const localSession = await getRoute(local.listeners('request')[0], '/api/session', { host: 'localhost', cookie });
   assert.equal(localSession.status, 200);
   assert.deepEqual(localSession.body, session.body);

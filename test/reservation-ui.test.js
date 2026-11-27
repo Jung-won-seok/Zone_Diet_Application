@@ -1,9 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
+const { readPublicAsset } = require('./support/public-assets');
 const vm = require('node:vm');
 
-const reservationSource = fs.readFileSync(require.resolve('../reservations'), 'utf8');
+const reservationSource = readPublicAsset('reservations.js');
 const ui = vm.createContext({ escapeHTML: value => String(value ?? '').replace(/[&<>]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[char])) });
 vm.runInContext(reservationSource, ui);
 

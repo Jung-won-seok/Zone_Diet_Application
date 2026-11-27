@@ -15,6 +15,25 @@ npm start
 
 로컬 주소는 http://localhost:3000 입니다. 로컬 개발 데이터는 `.data/`에 저장됩니다. 기존 단일 사진 기록도 그대로 사용할 수 있습니다.
 
+로컬에서 DB 또는 외부 서비스를 연결할 때는 `config/.env.example`을 `config/.env.local`로 복사해 필요한 값을 입력합니다. `npm start`와 `npm run db`는 기존 루트의 `.env.local`도 지원합니다. 운영 환경변수는 Vercel 프로젝트에서 관리합니다.
+
+## 폴더 구조
+
+| 경로 | 역할 |
+| --- | --- |
+| `client/` | 브라우저 진입점인 `index.html`과 화면별 JavaScript·CSS. 공통 화면은 `app/`, 회원 관리는 `members/`, 수업 예약과 오늘의 와드는 `training/`, 존다와 네이버 연동 화면은 `zonda/`와 `naver/`에 있습니다. |
+| `client/guide/` | 동작 사전·네임드 와드·기본 용어 화면. 2D·3D 시뮬레이션은 `motion/`에 있습니다. |
+| `client/assets/images/`, `client/pwa/` | 가이드 이미지, 앱 아이콘과 설치·푸시 알림에 쓰이는 매니페스트 및 서비스 워커 |
+| `server/` | HTTP 앱(`index.js`)과 로컬 서버(`local.js`). `services/`는 기능별 처리, `db/`는 PostgreSQL 스키마와 데이터 접근, `storage/`는 저장 방식 선택과 Blob 연결, `naver/`는 네이버 API 연동을 담당합니다. |
+| `api/` | Vercel에서 API 요청을 받는 진입점 |
+| `shared/` | 브라우저와 서버 양쪽에서 쓰는 네임드 와드 데이터와 식단 요약 |
+| `config/` | 환경변수 예시와 정적 파일 경로 목록 |
+| `scripts/`, `test/` | 빌드·DB 이관 도구와 자동화 테스트 |
+| `public/` | `npm run build`가 생성하는 배포용 정적 파일 |
+| `.data/` | 로컬 개발 데이터와 업로드한 사진 |
+
+화면을 수정할 때는 `client/` 또는 `shared/`의 원본을 편집합니다. 새 정적 파일은 `config/public-assets.js`에 등록합니다. 이 목록으로 로컬 서버와 빌드가 같은 공개 경로를 사용하므로 서비스 워커도 기존 `/push-worker.js` 주소에서 동작합니다.
+
 ## 수업 예약과 회원 등록
 
 관리자는 **박스 회원 관리 → 회원 등록**에서 이름·아이디·초기 비밀번호를 등록합니다. 회원은 해당 계정으로 로그인하면 수업 예약 화면에 들어갑니다. 관리자는 수업별 확정 명단과 대기 순번을 확인할 수 있습니다.
@@ -88,7 +107,7 @@ GitHub의 `Jung-won-seok/Zone_Diet_Application` 저장소와 Vercel의 `zone-die
 기존 Blob 방식으로 시작할 때는 다음과 같이 설정합니다. PostgreSQL로 전환하는 순서는 아래에 있습니다.
 
 1. Vercel 프로젝트에 **Private Vercel Blob** 저장소를 연결합니다.
-2. `BLOB_READ_WRITE_TOKEN`과 `INITIAL_ACCOUNT_PASSWORDS`를 Production 환경변수에 설정합니다. `.env.example`에서 키 형식을 확인할 수 있습니다.
+2. `BLOB_READ_WRITE_TOKEN`과 `INITIAL_ACCOUNT_PASSWORDS`를 Production 환경변수에 설정합니다. `config/.env.example`에서 키 형식을 확인할 수 있습니다.
 3. 새 박스는 `INITIAL_ACCOUNT_PASSWORDS`에 `admin`의 8자 이상 비밀번호를 담은 JSON을 설정하고 첫 로그인 후 실제 회원을 등록합니다. 기존 데모 구성은 `admin`과 `member01`부터 `member20`까지의 초기 비밀번호를 모두 지정하면 생성됩니다.
 4. 이 설정은 빈 저장소의 첫 초기화에만 적용됩니다. 기존 저장소를 연결하면 회원·팀·식단과 네이버 연결을 그대로 사용합니다.
 
@@ -96,7 +115,7 @@ GitHub의 `Jung-won-seok/Zone_Diet_Application` 저장소와 Vercel의 `zone-die
 
 ### PostgreSQL 연결과 기존 데이터 이관
 
-박스 전용 PostgreSQL 또는 Supabase 프로젝트를 준비합니다. Supabase에서는 프로젝트의 **Connect**에서 서버리스용 트랜잭션 풀러 연결 주소를 복사합니다. 이관 도구와 서버는 비공개 `leben` 스키마를 사용합니다. 최초 설치와 앱 실행에는 해당 스키마와 테이블을 소유하는 서버 계정을 사용합니다. 연결 주소는 개발 시 `.env.local`, 배포 시 Vercel의 서버 환경변수 `LEBEN_DATABASE_URL`에 설정합니다. 원격 DB는 인증서를 검증합니다. 전용 CA가 필요한 경우 `LEBEN_DATABASE_CA`에 프로젝트의 CA 인증서를 설정합니다.
+박스 전용 PostgreSQL 또는 Supabase 프로젝트를 준비합니다. Supabase에서는 프로젝트의 **Connect**에서 서버리스용 트랜잭션 풀러 연결 주소를 복사합니다. 이관 도구와 서버는 비공개 `leben` 스키마를 사용합니다. 최초 설치와 앱 실행에는 해당 스키마와 테이블을 소유하는 서버 계정을 사용합니다. 연결 주소는 개발 시 `config/.env.local`, 배포 시 Vercel의 서버 환경변수 `LEBEN_DATABASE_URL`에 설정합니다. 원격 DB는 인증서를 검증합니다. 전용 CA가 필요한 경우 `LEBEN_DATABASE_CA`에 프로젝트의 CA 인증서를 설정합니다.
 
 예약 순서, 수업 정원, 회원권과 사용 이력은 별도 테이블에 저장합니다. 기본 주간 시간표는 앱의 기존 규칙을 사용하고, 예약이나 휴강·특강 설정이 생기면 해당 날짜의 수업을 DB에 기록합니다. 예약 변경과 횟수 차감·복구가 한 트랜잭션에서 확정됩니다. 기존 계정과 세션, WOD·식단 기록, 알림, 사진 참조도 함께 이관합니다. 횟수권 변경 이력의 시작 값은 이관 시점의 잔여 횟수입니다.
 
@@ -144,7 +163,7 @@ npm run db -- verify .data/migration/trial.json
 
 암호화 키는 서버에 저장하는 네이버 토큰 보호용입니다. 비밀번호 관리자 등에서 안전하게 보관하고 연결된 계정이 있는 동안 변경하지 마세요. 키를 변경하면 기존 회원의 재연결이 필요합니다. 키는 `node -e "process.stdout.write(require('node:crypto').randomBytes(32).toString('base64'))"`로 생성할 수 있습니다.
 
-로컬에서는 기존 `.env.local`에 위 네 가지 설정을 추가합니다. 로컬 Callback URL은 `http://localhost:3000/api/naver/callback`이고 네이버 개발자 센터에도 따로 등록해야 합니다. `npm start`가 `.env.local`을 읽습니다. 기존 파일에 있는 다른 설정을 지우거나 운영 환경변수 전체를 로컬로 복사하지 마세요.
+로컬에서는 사용 중인 환경변수 파일에 위 네 가지 설정을 추가합니다. 새로 설정할 때의 경로는 `config/.env.local`입니다. 로컬 Callback URL은 `http://localhost:3000/api/naver/callback`이고 네이버 개발자 센터에도 따로 등록해야 합니다. 기존 파일에 있는 다른 설정을 지우거나 운영 환경변수 전체를 로컬로 복사하지 마세요.
 
 개발 중에는 개발자 센터의 테스트 ID를 등록하여 이용하고, 실제 회원 대상 운영 전에 [네이버 로그인 검수 안내](https://developers.naver.com/docs/login/verify/verify.md)를 확인하세요. 해당 회원은 카페 가입과 대상 게시판의 글쓰기 권한을 갖고 있어야 합니다. API 계약은 [공식 카페 API 문서](https://developers.naver.com/docs/login/cafe-api/cafe-api.md)를 따릅니다.
 

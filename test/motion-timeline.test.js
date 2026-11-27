@@ -1,11 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
+const { readPublicAsset } = require('./support/public-assets');
 const vm = require('node:vm');
 
 const browser = vm.createContext({});
 for (const file of ['guide-movements', 'motion-bodyweight', 'motion-strength', 'motion-equipment', 'motion-muscle-ups', 'motion-timeline']) {
-  vm.runInContext(fs.readFileSync(require.resolve('../' + file), 'utf8'), browser);
+  vm.runInContext(readPublicAsset(file + '.js'), browser);
 }
 const ids = vm.runInContext('guideMovements.map(m => m.id)', browser);
 const required = ['head', 'shoulder', 'elbow', 'wrist', 'hip', 'knee', 'ankle', 'toe'];

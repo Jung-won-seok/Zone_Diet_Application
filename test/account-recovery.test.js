@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { ServerResponse } = require('node:http');
-const { createBoxMemberService } = require('../members-server');
+const { createBoxMemberService } = require('../server/services/members');
 const { createServer, makeUser, seedStore, ApiError } = require('../server');
 
 const issuePath = '/api/admin/members/recovery';

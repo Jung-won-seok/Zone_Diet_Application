@@ -75,7 +75,7 @@ test('PostgreSQL migration, parallel reservations and visit accounting', {
   skip: !controlUrl && 'Set LEBEN_TEST_DATABASE_URL to a test PostgreSQL role with CREATEDB',
   timeout: 120000
 }, async t => {
-  const { createPostgresContext, loadPostgresStore, importPostgresStore } = require('../db/store');
+  const { createPostgresContext, loadPostgresStore, importPostgresStore } = require('../server/db/store');
   await withTestDatabase(async pool => {
     t.mock.timers.enable({apis: ['Date'], now: new Date('2026-11-27T09:00:00+09:00')});
     const password = randomUUID();

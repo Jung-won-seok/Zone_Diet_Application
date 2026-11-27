@@ -1,12 +1,12 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const vm=require('node:vm');
-const fs=require('node:fs');
-const MealSummary=require('../meal-summary');
+const { readPublicAsset } = require('./support/public-assets');
+const MealSummary=require('../shared/meal-summary');
 const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function context(extra={}) {
   const c=vm.createContext({URL,Date,AbortController,setTimeout,escapeHTML,heading:()=>'',document:{querySelector:()=>null},...extra});
-  vm.runInContext(fs.readFileSync(require.resolve('../naver-ui.js'),'utf8'),c);
+  vm.runInContext(readPublicAsset('naver-ui.js'),c);
   return c;
 }
 test('board links extract only the expected cafe and valid menu',()=>{
@@ -104,7 +104,7 @@ function draftHarness() {
   const dialog=new Element(), close=new Element(), calls=[];
   const response={draft:MealSummary.buildDraft({date:'2026-11-08',startDate:'2026-11-08',memberId:'u01',name:'김민준',posts:[]}),title:'11.8일 존다 1일차',bodyHtml:'<p>서버에서 확인한 식단</p>',summary:{},target:{clubId:'31811778',cafeUrl:'https://cafe.naver.com/mycaffelatte',cafeName:'카페',menuId:'7',boardName:'김민준'},connection:{connected:true,displayName:'김민준'},previewVersion:'exact-preview',readyToPublish:true,reasons:[]};
   const c=context({MealSummary,mealPage:{date:'2026-11-08',data:{posts:[]}},bootstrap:{program:{startDate:'2026-11-08'}},session:{id:'u01',name:'김민준'},mealsHasUnsaved:()=>false,toast:()=>{},navigator:{},api:async(url,options)=>{calls.push({url,body:JSON.parse(options.body)});return url.endsWith('/preview')?{...response,title:JSON.parse(options.body).title}:{publication:{status:'published',articleUrl:'https://cafe.naver.com/mycaffelatte/10',message:'카페에 게시했어요.'}};},createMealDialog:html=>{dialog.innerHTML=html;dialog.nodes.set('[data-close-dialog]',close);dialog.querySelector('#cafe-draft-title').value=response.title;return dialog;}});
-  vm.runInContext(fs.readFileSync(require.resolve('../cafe-draft.js'),'utf8'),c);c.openCafeDraft();
+  vm.runInContext(readPublicAsset('cafe-draft.js'),c);c.openCafeDraft();
   return {c,dialog,calls,response};
 }
 test('publication requires an exact fresh preview, explicit check, and final click',async()=>{

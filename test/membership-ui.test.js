@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
+const { readPublicAsset } = require('./support/public-assets');
 const vm = require('node:vm');
 
 class Control {
@@ -47,7 +47,7 @@ test('coach reviews the newest visit balance after a conflict and explicitly sel
     return pass;
   }
   const context = vm.createContext({ document: { querySelector: () => root }, bootstrap: { revision: 0, teams: [] }, api, escapeHTML: String });
-  vm.runInContext(fs.readFileSync(require.resolve('../member-management.js'), 'utf8'), context);
+  vm.runInContext(readPublicAsset('member-management.js'), context);
   vm.runInContext('mountBoxMembers()', context);
   await new Promise(resolve => setImmediate(resolve));
   const list = root.querySelector('#box-member-directory');

@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { tables, rowKey, toRows, fromRows } = require('../db/rows');
+const { tables, rowKey, toRows, fromRows } = require('../server/db/rows');
 
 test('database rows preserve legacy accounts, pass charges, FIFO and unknown app data in arbitrary query order', () => {
   const date = '2027-03-01';

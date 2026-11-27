@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
+const { readPublicAsset } = require('./support/public-assets');
 const vm = require('node:vm');
 
 class Element extends EventTarget {
@@ -28,7 +28,7 @@ function fixture() {
     querySelector: () => scale,
   };
   const scope = vm.createContext({ AbortController });
-  vm.runInContext(fs.readFileSync(require.resolve('../motion-3d-controls'), 'utf8'), scope);
+  vm.runInContext(readPublicAsset('motion-3d-controls.js'), scope);
   const changes = [];
   const camera = scope.mountMovementCamera(canvas, controls, view => changes.push(view));
   camera.setEnabled(true);

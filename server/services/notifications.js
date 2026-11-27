@@ -1,5 +1,5 @@
 const { createHash, createPrivateKey, generateKeyPairSync, sign } = require('node:crypto');
-const { getClassCapacity } = require('./schedule-server');
+const { getClassCapacity } = require('./schedule');
 
 const inboxLimit = 50;
 const maxDevices = 8;

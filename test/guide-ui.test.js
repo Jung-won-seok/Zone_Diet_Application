@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
+const { readPublicAsset } = require('./support/public-assets');
 const vm = require('node:vm');
 
 function guideContext(extra = {}) {
@@ -11,7 +11,7 @@ function guideContext(extra = {}) {
   for (const file of ['guide-movements', 'guide-benchmarks', 'guide-terms', 'guide-match',
     'motion-strength', 'motion-bodyweight', 'motion-equipment', 'motion-muscle-ups', 'motion-timeline', 'motion-muscles', 'motion-muscle-view',
     'motion-3d-controls', 'motion-player', 'guide-movement-art', 'guide-term-art', 'guide']) {
-    vm.runInContext(fs.readFileSync(require.resolve('../' + file), 'utf8'), context);
+    vm.runInContext(readPublicAsset(file + '.js'), context);
   }
   return context;
 }
@@ -229,9 +229,9 @@ test('movement cards lead with the name and keep instructions and equipment in t
 
 test('every guide entry shares its artwork between the card and detail, with local sources and credited portraits', () => {
   const ui = guideContext();
-  const assets = require('../public-assets');
+  const assets = require('../config/public-assets');
   const illustrations = { movement: new Set(), term: new Set() };
-  const css = fs.readFileSync(require.resolve('../guide.css'), 'utf8');
+  const css = readPublicAsset('guide.css');
   for (const item of ui.guideEntries()) {
     const art = ui.guideArtwork(item);
     assert.match(art, /class="guide-artwork" aria-hidden="true"><(?:span|img) /, item.id);
@@ -244,7 +244,7 @@ test('every guide entry shares its artwork between the card and detail, with loc
       illustrations[item.category].add(art);
     }
     if (item.portrait) {
-      assert.ok(assets.includes(item.portrait.file) && fs.existsSync(require.resolve('../' + item.portrait.file)), item.id);
+      assert.ok(Object.hasOwn(assets, item.portrait.file), item.id);
       assert.ok(art.includes(item.portrait.file) && detail.includes(item.portrait.name) && detail.includes(item.portrait.source));
     }
   }

@@ -1,4 +1,4 @@
-const { ApiError } = require('./server');
+const { ApiError } = require('../index');
 
 function getStoreMode(defaultMode = 'blob') {
   const mode = process.env.LEBEN_STORE || defaultMode;

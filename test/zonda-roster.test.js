@@ -1,10 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
+const { readPublicAsset } = require('./support/public-assets');
 const vm = require('node:vm');
 
-const script = fs.readFileSync(path.join(__dirname, '..', 'admin.js'), 'utf8');
+const script = readPublicAsset('admin.js');
 
 test('Zonda assignment presets cover exactly the enrolled roster without exceeding a team limit', () => {
   for (const size of [0, 1, 5, 19, 20, 21, 25, 30, 31]) {

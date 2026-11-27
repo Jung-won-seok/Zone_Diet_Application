@@ -1,5 +1,5 @@
 const crypto = require('node:crypto');
-const MealSummary = require('./meal-summary');
+const MealSummary = require('../../shared/meal-summary');
 const DEFAULT_CAFE = { clubId: '31811778', url: 'https://cafe.naver.com/mycaffelatte', name: 'mycaffelatte' };
 const MEALS = ['breakfast', 'lunch', 'dinner'];
 const object = x => x !== null && typeof x === 'object' && !Array.isArray(x);

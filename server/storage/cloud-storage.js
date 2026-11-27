@@ -1,5 +1,5 @@
 const { get, put, del, BlobPreconditionFailedError } = require('@vercel/blob');
-const { seedStore, ApiError } = require('./server');
+const { seedStore, ApiError } = require('../index');
 const { getStoreMode } = require('./storage-mode');
 const STORE_PATH = 'app/store-v1.json';
 
@@ -80,7 +80,7 @@ async function createCloudContext(request = {}) {
   const mode = getStoreMode();
   const options = blobOptions();
   const context = mode === 'postgres'
-    ? await require('./db/store').createPostgresContext(require('./db/pool').getPool(), request)
+    ? await require('../db/store').createPostgresContext(require('../db/pool').getPool(), request)
     : await createBlobContext(options);
   return { ...context, mediaStorage: blobMediaStorage(options) };
 }

@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
+const { readPublicAsset } = require('./support/public-assets');
 const vm = require('node:vm');
 
 const motion = {
@@ -94,7 +94,7 @@ function fixture() {
     },
   });
   for (const file of ['motion-3d-controls', 'motion-player']) {
-    vm.runInContext(fs.readFileSync(require.resolve('../' + file), 'utf8'), ui);
+    vm.runInContext(readPublicAsset(file + '.js'), ui);
   }
   const player = ui.mountMovementPlayer(root, motion);
   return {

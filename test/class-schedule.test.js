@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createReservationService } = require('../reservations-server');
+const { createReservationService } = require('../server/services/reservations');
 const { ApiError } = require('../server');
 
 const saturday = '2026-12-05', monday = '2026-12-07';

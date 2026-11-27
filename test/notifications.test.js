@@ -1,9 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createHash, createPublicKey, verify } = require('node:crypto');
-const { readFileSync } = require('node:fs');
+const { readPublicAsset } = require('./support/public-assets');
 const vm = require('node:vm');
-const { createNotificationService } = require('../notifications-server');
+const { createNotificationService } = require('../server/services/notifications');
 
 const now = Date.parse('2026-11-25T07:00:00+09:00');
 const endpoint = 'https://fcm.googleapis.com/fcm/send/a-registration-token';
@@ -53,7 +53,7 @@ test('a stale tab discards inbox details and device state from a switched accoun
   const context = vm.createContext({ page, session: { id: 'original' },
     api: async () => { calls++; return { memberId: 'other', items: [{ id: 'private new details' }], devices: ['other device'] }; },
     clearInterval: timer => { cleared = timer; }, document: { hidden: false, removeEventListener() {} }, navigator: {} });
-  vm.runInContext(readFileSync(require.resolve('../notifications.js'), 'utf8'), context);
+  vm.runInContext(readPublicAsset('notifications.js'), context);
   await vm.runInContext('bookingNotificationPage = page; refreshBookingInbox(page)', context);
   assert.equal(cleared, page.timer);
   assert.equal(page.controller.signal.aborted, true);
@@ -194,7 +194,7 @@ test('promotions reuse the service JWT and renew it near expiry within the exist
 });
 
 test('worker shows private schedule details only for authenticated device and safe date; expired sessions use a generic alert', async () => {
-  const source = readFileSync(require.resolve('../push-worker.js'), 'utf8');
+  const source = readPublicAsset('push-worker.js');
   const cancelled = { ...event, type: 'class_cancelled', message: event.date + ' ' + event.startTime + ' 수업이 휴강되어 예약이 취소됐어요. 사유 · 시설 점검' };
   for (const [allowed, item] of [[true, event], [true, cancelled], [false, cancelled]]) {
     const listeners = {}, shown = [];
