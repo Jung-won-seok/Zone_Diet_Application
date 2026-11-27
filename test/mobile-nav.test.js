@@ -46,7 +46,7 @@ class Element extends Events {
   setAttribute(name, value) { this.attributes.set(name, value); }
   removeAttribute(name) { this.attributes.delete(name); }
   querySelectorAll(selector) {
-    const matches = element => selector === '.drag-preview' ? element.classList.contains('drag-preview') : element.tagName === 'A' && element.attributes.has('data-page');
+    const matches = element => selector === '.drag-preview' ? element.classList.contains('drag-preview') : ['A','BUTTON'].includes(element.tagName) && element.attributes.has('data-page');
     return this.children.flatMap(child => [...(matches(child) ? [child] : []), ...child.querySelectorAll(selector)]);
   }
   closest() {
@@ -255,6 +255,18 @@ test('pinch and selected text do not become page navigation', () => {
   f.win.getSelection = () => ({ isCollapsed: false });
   f.swipe(-110);
   assert.deepEqual(f.calls, []);
+});
+
+test('swiping onto a category disclosure opens its children without routing to another page', () => {
+  const f = fixture({active:3});
+  const disclosure = f.links[4];
+  disclosure.tagName = 'BUTTON';
+  let clicks = 0;
+  disclosure.click = () => clicks++;
+  f.swipe(-110);
+  assert.equal(clicks, 1);
+  assert.deepEqual(f.calls, []);
+  assert.ok(f.links[3].classList.contains('active'));
 });
 
 test('blocked screens, desktop layout, resizing, and destruction disable gesture navigation', () => {

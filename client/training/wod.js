@@ -20,6 +20,22 @@ function wodUrl(date) {
   return '/api/wod' + (validBookingDate(date) ? '?date=' + encodeURIComponent(date) : '');
 }
 
+// The reservation preview and the editor read the same account-specific day.
+let recentWodDay = null;
+function readWodDay(date, force = false) {
+  const key = validBookingDate(date) ? date : bookingKoreaDate.format(new Date());
+  const now = Date.now();
+  if (!force && recentWodDay?.date === key && recentWodDay.user === session.id &&
+      recentWodDay.token === csrfToken && now - recentWodDay.started < 15000) return recentWodDay.request;
+  const entry = { date: key, user: session.id, token: csrfToken, started: now };
+  entry.request = api(wodUrl(date)).catch(error => {
+    if (recentWodDay === entry) recentWodDay = null;
+    throw error;
+  });
+  recentWodDay = entry;
+  return entry.request;
+}
+
 function wodGuideClick(event) {
   const trigger = event.target.closest('[data-guide-entry]');
   if (trigger) openGuideEntry(trigger.dataset.guideEntry, trigger);
@@ -46,7 +62,7 @@ async function mountWodPreview(date) {
   link.textContent = validBookingDate(date) ? '선택한 날의 와드 보기 →' : '오늘의 와드 보기 →';
   preview.append(link);
   try {
-    const day = await api(wodUrl(date));
+    const day = await readWodDay(date);
     if (!preview.isConnected) return;
     const info = document.createElement('div');
     const heading = document.createElement('h2');
@@ -177,12 +193,12 @@ async function mountWod(date) {
   const root = document.querySelector('#wod-page');
   if (!root) return;
   let day;
-  async function loadDay() {
+  async function loadDay(force = false) {
     const oldForm = root.querySelector('form');
     if (oldForm) oldForm.inert = true;
     root.setAttribute('aria-busy', 'true');
     try {
-      const fresh = await api(wodUrl(date));
+      const fresh = await readWodDay(date, force);
       if (!root.isConnected) return;
       day = fresh;
       paint();
@@ -213,7 +229,7 @@ async function mountWod(date) {
   root.onclick = event => {
     wodGuideClick(event);
     if (!event.target.closest('[data-wod-reload]') || root.getAttribute('aria-busy') === 'true') return;
-    if (!wodIsDirty() || confirm('입력한 내용을 버리고 최신 정보를 불러올까요?')) void loadDay();
+    if (!wodIsDirty() || confirm('입력한 내용을 버리고 최신 정보를 불러올까요?')) void loadDay(true);
   };
   root.onchange = event => {
     const field = event.target;
@@ -260,6 +276,7 @@ async function mountWod(date) {
       message.textContent = error.message;
       root.querySelector('[data-wod-reload]').hidden = error.status !== 409;
     } finally {
+      recentWodDay = null;
       form.inert = false;
       form.dataset.saving = 'false';
     }

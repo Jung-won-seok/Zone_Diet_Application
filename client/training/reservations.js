@@ -1,4 +1,5 @@
 let reservationPage = null;
+let recentReservationDay = null;
 
 const bookingWeekday = new Intl.DateTimeFormat('ko-KR', { weekday: 'short', timeZone: 'UTC' });
 const bookingDayLabel = new Intl.DateTimeFormat('ko-KR', { month: 'long', day: 'numeric', weekday: 'long', timeZone: 'UTC' });
@@ -33,6 +34,7 @@ function reservationsView() {
 
 function cleanupReservations() {
   if (!reservationPage) return;
+  reservationPage.readController?.abort();
   const mode = reservationPage.calendarMode;
   clearTimeout(reservationPage.refreshTimer);
   document.removeEventListener('visibilitychange', reservationPage.onVisible);
@@ -242,7 +244,7 @@ function paintReservationDay(page) {
   const membership = session.isAdmin ? '' : bookingMembershipCard(page.data?.membership, page.date);
   host.innerHTML = bookingCalendar(page) +
     `<section class="booking-sessions" aria-label="선택한 날짜의 수업"><div class="booking-list-head"><h2>${label}</h2>
-      <button type="button" class="booking-refresh" data-book-refresh>새로고침</button></div>
+      <button type="button" class="booking-refresh" data-book-refresh>${page.showingSnapshot ? '현황 확인 중…' : '새로고침'}</button></div>
       <p class="booking-feedback" role="status" aria-live="polite"></p>${schedule}</section>` + membership;
   host.querySelectorAll('details[data-roster]').forEach(node => { node.open = openRosters.has(node.dataset.roster); });
   const feedback = host.querySelector('.booking-feedback');
@@ -310,17 +312,23 @@ async function loadReservationDay(page) {
   if (page.slotFeedback?.status === 'unknown') page.slotFeedback.message = '최신 예약 현황을 확인하고 있습니다.';
   paintReservationDay(page);
   try {
-    const data = await api('/api/reservations' + (page.useServerDate ? '' : '?date=' + encodeURIComponent(page.date)));
+    const data = await api('/api/reservations' + (page.useServerDate ? '' : '?date=' + encodeURIComponent(page.date)), {signal: page.readController?.signal});
+    if (reservationPage !== page) return;
     page.data = data;
+    if (!session.isAdmin) recentReservationDay = { data, receivedAt: Date.now(), user: page.user, token: page.token };
     page.date = data.date;
     page.today = data.today;
     page.slotFeedback = page.slotFeedback?.status === 'unknown' && page.slotFeedback.request.date === data.date
       ? reconcileBooking(page.slotFeedback.request, data, page.slotFeedback.errorMessage) : null;
   } catch (error) {
+    if (reservationPage !== page) return;
+    recentReservationDay = null;
+    if (page.showingSnapshot) page.data = null;
     if (page.slotFeedback?.status === 'unknown') page.slotFeedback.message = '최신 예약 현황을 확인하지 못했습니다. 다시 확인해 주세요.';
     else page.error = error.message || '수업을 불러오지 못했습니다. 새로고침해주세요.';
   } finally {
     page.busy = false;
+    page.showingSnapshot = false;
     paintReservationDay(page);
     scheduleReservationRefresh(page);
   }
@@ -365,6 +373,7 @@ async function changeReservation(page, button) {
     if (!confirm(`${bookingDayLabel.format(new Date(page.date + 'T12:00:00Z'))} 수업을 ${body.fromStartTime}에서 ${startTime}으로 변경할까요?`)) return;
   }
   if (action === 'cancel' && !confirm(`${bookingDayLabel.format(new Date(page.date + 'T12:00:00Z'))} ${startTime} 수업 신청을 취소할까요?`)) return;
+  recentReservationDay = null;
   page.busy = true;
   page.error = '';
   const original = page.data.classes.find(slot => slot.startTime === startTime);
@@ -406,6 +415,15 @@ function mountReservations(date, calendarMode = 'week') {
   const today = bookingKoreaDate.format(new Date());
   const hasDate = validBookingDate(date);
   const page = { host, calendarMode, date: hasDate ? date : today, today, useServerDate: !hasDate, data: null, busy: false, error: '', slotFeedback: null };
+  page.user = session.id;
+  page.token = csrfToken;
+  page.readController = new AbortController();
+  const previous = recentReservationDay;
+  if (!session.isAdmin && previous && previous.user === page.user && previous.token === page.token &&
+      previous.data.date === page.date && previous.data.today === today && Date.now() - previous.receivedAt < 30000) {
+    page.data = previous.data;
+    page.showingSnapshot = true;
+  }
   const rules = host.parentElement.querySelector('.booking-rules');
   page.rulesLayout = window.matchMedia('(min-width: 851px)');
   page.onRulesLayout = () => { rules.open = page.rulesLayout.matches; };

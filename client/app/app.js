@@ -3,6 +3,8 @@ const blankState = () => ({ settings: { name: '', startWeight: '', goalWeight: '
 let state = blankState();
 let session = null;
 let bootstrap = null;
+let bootstrapFetchedAt = 0;
+let renderVersion = 0;
 let csrfToken = '';
 let authReady = false;
 let renderedHash = location.hash;
@@ -73,8 +75,12 @@ async function save(next) {
   try { const result = await api('/api/personal', {method:'PUT', body:JSON.stringify({...next, personalRevision:bootstrap.personalRevision})}); bootstrap = result; state = result.personal; return true; }
   catch (error) { toast(error.status === 409 ? '다른 창에서 기록이 변경됐어요. 입력 내용을 복사한 뒤 새로고침해주세요.' : error.message); return false; }
 }
+function applyBootstrap(data) {
+  bootstrap = data; session = data.user; csrfToken = data.csrfToken; state = data.personal || blankState();
+  bootstrapFetchedAt = Date.now();
+}
 async function loadBootstrap() {
-  bootstrap = await api('/api/bootstrap'); session = bootstrap.user; csrfToken = bootstrap.csrfToken; state = bootstrap.personal || blankState();
+  applyBootstrap(await api('/api/bootstrap'));
 }
 function loginView(error = '') {
   return `<div class="login-shell"><section class="login-story"><span class="brand"><span class="brand-mark">L<span>↗</span></span><span>LEBEN<small>CROSSFIT</small></span></span>
@@ -88,6 +94,28 @@ function loginView(error = '') {
 }
 const memberProgramRoutes = [['today','오늘의 현황','오늘'],['team','우리 팀','우리 팀'],['board','전체 식단','전체 식단'],['record','데일리 기록','기록'],['progress','나의 변화','변화']];
 const adminProgramRoutes = [['admin','팀 · 역할 관리','팀 관리'],['accounts','존다 참가자','참가자'],['naver','네이버 카페 연결','카페 연결'],['board','전체 식단','전체 식단']];
+const boxPages = new Set(['reservations','wod','guide','members','zonda','profile']);
+
+function setProgramMenuOpen(open, focusToggle = false) {
+  const trigger = document.querySelector('.zonda-toggle');
+  const menu = document.querySelector('.zonda-subnav');
+  menu.hidden = !trigger || !open;
+  if (!trigger) return;
+  trigger.setAttribute('aria-expanded', String(open));
+  if (focusToggle) trigger.focus({preventScroll:true});
+}
+window.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && !document.querySelector('.zonda-subnav').hidden && !document.querySelector('dialog[open]') &&
+      (window.matchMedia('(max-width: 580px)').matches || event.target.closest('.zonda-toggle, .zonda-subnav'))) {
+    setProgramMenuOpen(false, true);
+  }
+});
+function dismissMobileProgramMenu(event) {
+  if (window.matchMedia('(max-width: 580px)').matches && !document.querySelector('.zonda-subnav').hidden &&
+      !event.target.closest('.zonda-toggle, .zonda-subnav')) setProgramMenuOpen(false);
+}
+window.addEventListener('pointerdown', dismissMobileProgramMenu);
+window.addEventListener('focusin', dismissMobileProgramMenu);
 function resolvePage(route, detail) {
   if (route === 'profile') return 'profile';
   if (session.pendingApproval) return 'connect';
@@ -105,49 +133,55 @@ function resolvePage(route, detail) {
 function renderShell(page) {
   document.body.classList.toggle('is-admin', session.isAdmin);
   document.body.classList.toggle('is-pending-member', Boolean(session.pendingApproval));
-  const inBox = ['reservations','wod','guide','members','zonda','profile'].includes(page);
+  const inBox = boxPages.has(page);
   document.body.classList.toggle('in-box', inBox);
   document.body.classList.toggle('in-zonda', !inBox && !session.pendingApproval);
   const boxReturn = document.querySelector('.box-return');
   const onBoxPage = inBox && page !== 'zonda' && page !== 'profile';
-  boxReturn.hidden = onBoxPage || Boolean(session.pendingApproval);
+  boxReturn.hidden = page !== 'profile' || Boolean(session.pendingApproval);
   if (onBoxPage) {
     const boxHash = '#' + page;
     boxReturn.setAttribute('href', location.hash.split('/')[0] === boxHash ? location.hash : boxHash);
   }
   const inProgram = !inBox && !session.pendingApproval;
-  const boxRoutes = [['reservations','수업 예약','수업 예약'],['wod','오늘의 와드','와드'],['guide','크로스핏 가이드','가이드']];
+  const boxRoutes = session.pendingApproval ? [['connect','카페 연동 신청','카페 연동']] :
+    [['reservations','수업 예약','수업 예약'],['wod','오늘의 와드','와드'],['guide','크로스핏 가이드','가이드']];
   if (session.isAdmin) boxRoutes.push(['members','박스 회원 관리','회원 관리']);
-  boxRoutes.push(['zonda','존다 프로그램','존다']);
-  const programRoutes = session.isAdmin ? adminProgramRoutes : memberProgramRoutes;
+  if (!session.pendingApproval) boxRoutes.push(['zonda','존다 프로그램','존다']);
+  const hasProgramAccess = session.isAdmin || bootstrap.zondaParticipant;
   const lastBoxHref = boxReturn.getAttribute('href');
-  const sidebarLinks = (routes, cssClass = '') => routes.map(([id,label,shortLabel]) => {
-    const href = inProgram && lastBoxHref.startsWith('#' + id + '/') ? lastBoxHref : '#' + id;
-    return `<a href="${escapeHTML(href)}" data-page="${id}" class="${cssClass}" aria-label="${label}" draggable="false">${navLabel(id,label,shortLabel)}</a>`;
-  }).join('');
   const nav = document.querySelector('.sidebar nav');
-  if (inProgram) {
-    nav.innerHTML = sidebarLinks(programRoutes, 'desktop-program-link') + sidebarLinks(boxRoutes, 'mobile-box-link');
-  } else {
-    nav.innerHTML = sidebarLinks(session.pendingApproval ? [['connect','카페 연동 신청','카페 연동']] : boxRoutes);
-  }
   const localNav = document.querySelector('.zonda-subnav');
-  localNav.hidden = !inProgram;
-  const sectionRoutes = session.isAdmin ? programRoutes : [...programRoutes, ['settings','프로그램 설정','설정']];
-  localNav.innerHTML = inProgram ? sectionRoutes.map(([id,label,shortLabel]) =>
-    `<a href="#${id}" data-page="${id}" aria-label="${label}">${shortLabel}</a>`
-  ).join('') : '';
-  const settingsLink = document.querySelector('.settings-link');
-  settingsLink.innerHTML = navLabel('settings','프로그램 설정','설정');
-  settingsLink.setAttribute('aria-label','프로그램 설정');
-  settingsLink.setAttribute('draggable','false');
-  document.querySelector('.program-label').textContent = session.pendingApproval ? '카페 연결 준비' : inBox ? '박스 메뉴' : bootstrap.program.name;
-  document.querySelector('.settings-link').style.display = inBox || session.isAdmin || session.pendingApproval ? 'none' : '';
+  const layout = [session.isAdmin, Boolean(session.pendingApproval), hasProgramAccess].join('|');
+  if (nav.dataset.layout !== layout) {
+    nav.dataset.layout = layout;
+    nav.innerHTML = boxRoutes.map(([id,label,shortLabel]) => {
+      const content = navLabel(id,label,shortLabel);
+      if (id === 'zonda') return `<button type="button" class="zonda-toggle" data-page="zonda" aria-label="존다 프로그램" aria-controls="zonda-submenu" aria-expanded="false">${content}</button>`;
+      return `<a href="#${id}" data-page="${id}" aria-label="${label}" draggable="false">${content}</a>`;
+    }).join('');
+    const sectionRoutes = session.isAdmin ? adminProgramRoutes : hasProgramAccess ? [...memberProgramRoutes, ['settings','프로그램 설정','설정']]
+      : [['zonda','존다 참가 안내','참가 안내']];
+    localNav.innerHTML = !session.pendingApproval ? sectionRoutes.map(([id,label,shortLabel]) =>
+      `<a href="#${id}" data-page="${id}" aria-label="${label}">${shortLabel}</a>`
+    ).join('') : '';
+    const trigger = document.querySelector('.zonda-toggle');
+    if (trigger) trigger.onclick = () => setProgramMenuOpen(localNav.hidden);
+    localNav.onclick = event => {
+      if (event.target.closest('a') && window.matchMedia('(max-width: 580px)').matches) setProgramMenuOpen(false, true);
+    };
+  }
+  setProgramMenuOpen((inProgram || (page === 'zonda' && !hasProgramAccess)) && !window.matchMedia('(max-width: 580px)').matches);
+  document.querySelector('.program-label').textContent = session.pendingApproval ? '카페 연결 준비' : '박스 메뉴';
   document.querySelectorAll('[data-page]').forEach(node => {
+    if (node.dataset.page === 'reservations' || node.dataset.page === 'wod') {
+      const base = '#' + node.dataset.page;
+      node.setAttribute('href', inProgram && lastBoxHref.startsWith(base + '/') ? lastBoxHref : base);
+    }
     const current = node.dataset.page === page;
     const section = inProgram && (node.dataset.page === 'zonda' || (page === 'connect' && node.dataset.page === 'settings'));
     node.classList.toggle('active', current || section);
-    if (current || section) node.setAttribute('aria-current', current ? 'page' : 'location');
+    if (current || section) node.setAttribute('aria-current', current && !node.getAttribute('aria-controls') ? 'page' : 'location');
     else node.removeAttribute('aria-current');
   });
   const name = escapeHTML(session.name);
@@ -245,9 +279,9 @@ function settingsView() {
   return heading('PROGRAM SETTINGS', '나에게 맞는 시작.', '프로그램에서 사용할 이름과 체중 목표를 설정해주세요.') +
     `<form id="settings-form" class="card settings-card"><div class="card-heading"><h2>나의 기본 정보</h2><span class="badge">모든 항목 선택</span></div><div class="field"><label for="name">이름 또는 닉네임</label><input id="name" name="name" maxlength="30" value="${escapeHTML(state.settings.name)}" placeholder="어떻게 불러드릴까요?"></div><div class="field-row" style="margin-top:22px"><div class="field"><label for="start-weight">시작 체중 (kg)</label><input id="start-weight" name="startWeight" type="number" min="1" max="500" step="0.1" value="${escapeHTML(state.settings.startWeight)}" placeholder="예: 75"></div><div class="field"><label for="goal-weight">목표 체중 (kg)</label><input id="goal-weight" name="goalWeight" type="number" min="1" max="500" step="0.1" value="${escapeHTML(state.settings.goalWeight)}" placeholder="직접 설정해주세요"></div></div><div class="form-actions"><button class="button" type="submit">설정 저장하기 ↗</button></div></form><p class="privacy-note">기록은 로그인한 계정별로 서버에 저장됩니다.<br>개인 체중과 이곳의 식단 메모는 다른 회원에게 공개되지 않습니다.<br>우리 팀에 올린 식단 사진과 사진 메모는 팀원이 볼 수 있고, 식단 담당이 존다 참가자 전체에게 공유할 수 있습니다.<br>팀과 역할은 관리자가 지정하며, 이 화면의 이름은 개인 화면에서 사용할 닉네임입니다.</p>`;
 }
-function render() {
+function render(loadingProgram = false) {
   if (!authReady) return;
-  mobileNavigation.cancel();
+  renderVersion++;
   cleanupMeals();
   cleanupNaverUI();
   const previousCalendarMode = cleanupReservations();
@@ -284,11 +318,18 @@ function render() {
     return;
   }
   const [route,date] = location.hash.slice(1).split('/');
-  const page = resolvePage(route, date);
+  const page = loadingProgram ? 'zonda' : resolvePage(route, date);
   loginRoot.innerHTML = ''; renderShell(page);
   document.querySelector('#page-label').textContent = labels[page];
-  document.querySelector('.topbar > span:first-child').firstChild.textContent = session.isAdmin ? '관리자 ' : '레벤 ';
-  mobileNavigation.sync();
+  document.querySelector('.topbar > span:first-child').firstChild.textContent =
+    (session.isAdmin ? '관리자' : '레벤') + (!boxPages.has(page) && !session.pendingApproval ? ' / 존다 ' : ' ');
+  if (loadingProgram) {
+    app.innerHTML = '<div class="page-heading"><h1>존다 프로그램</h1></div><p role="status">프로그램을 불러오는 중입니다.</p>';
+    personalSaved = '';
+    window.scrollTo(0, 0);
+    mobileNavigation.sync();
+    return;
+  }
   const validDate = date && /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(`${date}T12:00:00`)) && date <= todayKey();
   const views = {profile:profileView, reservations:reservationsView, wod:wodView, guide:guideView, members:boxMembersView,
     zonda:() => '<div class="page-heading"><h1>존다 프로그램</h1><p class="subtitle">팀별로 식단과 운동을 기록하는 8주 프로그램입니다. 참여를 원하면 박스 관리자에게 참가 등록을 요청해주세요.</p></div>',
@@ -324,6 +365,24 @@ function render() {
   });
   personalSaved = personalFormSignature();
   if (page !== 'guide') window.scrollTo(0,0);
+  mobileNavigation.sync();
+}
+async function refreshProgramLanding() {
+  const destination = location.hash;
+  render(true);
+  const version = renderVersion;
+  const current = () => version === renderVersion && location.hash === destination && session;
+  try {
+    const data = await api('/api/bootstrap');
+    if (!current()) return;
+    applyBootstrap(data);
+    if (session.isAdmin) resetAdminDraft();
+    render();
+  } catch (error) {
+    if (!current()) return;
+    app.innerHTML = `<h1>존다 프로그램</h1><p role="alert">${escapeHTML(error.message)}</p><button type="button" class="button secondary">다시 시도</button>`;
+    app.querySelector('button').onclick = refreshProgramLanding;
+  }
 }
 window.addEventListener('hashchange', async () => {
   const nextHash = location.hash;
@@ -332,10 +391,10 @@ window.addEventListener('hashchange', async () => {
   const restoreHash = () => history.replaceState(null, '', `${location.pathname}${location.search}${renderedHash}`);
   if (navigationPending) { restoreHash(); return; }
   navigationPending = true;
-  mobileNavigation.cancel();
   try {
     const hasDraft = personalIsDirty() || wodIsDirty() || naverIsDirty() || mealsHasUnsaved() || adminIsDirty() || boxMembersIsDirty();
     if (hasDraft) {
+      mobileNavigation.cancel();
       restoreHash();
       const recordDate = document.querySelector('#record-date');
       if (recordDate) recordDate.value = renderedHash.split('/')[1] || todayKey();
@@ -356,14 +415,16 @@ window.addEventListener('hashchange', async () => {
       }
       history.replaceState(destinationState, '', `${location.pathname}${location.search}${nextHash}`);
     }
-    if (nextHash === '#zonda' && session && !session.pendingApproval) {
-      try { await loadBootstrap(); }
-      catch (error) { restoreHash(); toast(error.message); return; }
+    const [route, detail] = nextHash.slice(1).split('/');
+    const enteringProgram = session && (route === 'zonda' ||
+      (document.body.classList.contains('in-box') && !boxPages.has(resolvePage(route, detail))));
+    if (enteringProgram && !session.pendingApproval &&
+        ((!session.isAdmin && !bootstrap.zondaParticipant) || Date.now() - bootstrapFetchedAt >= 30000)) {
+      return refreshProgramLanding();
     }
     render();
   } finally {
     navigationPending = false;
-    mobileNavigation.sync();
   }
 });
 window.addEventListener('beforeunload', event => { if(adminIsDirty() || mealsHasUnsaved() || naverIsDirty() || personalIsDirty() || boxMembersIsDirty() || wodIsDirty()) { event.preventDefault(); event.returnValue = ''; } });
