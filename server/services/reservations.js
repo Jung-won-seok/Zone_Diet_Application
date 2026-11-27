@@ -1,6 +1,6 @@
 const { randomUUID } = require('node:crypto');
 
-const { CAPACITY, seoulCalendar, scheduleDay, weekOverrides, getClassCapacity, prepareScheduleChange } = require('./schedule');
+const { CAPACITY, seoulCalendar, scheduleDay, getClassCapacity, prepareScheduleChange } = require('./schedule');
 const { membershipView, membershipIssue, chargeVisit, refundVisit } = require('./memberships');
 
 function bookingOpensAt(date) {
@@ -11,6 +11,39 @@ function bookingOpensAt(date) {
 
 function bookedClass(day, memberId) {
   return Object.keys(day).find(startTime => day[startTime].includes(memberId)) || null;
+}
+
+function calendarSummary(store, user, date, instant) {
+  const selected = new Date(date + 'T00:00:00Z');
+  const monday = selected.getUTCDate() - (selected.getUTCDay() + 6) % 7;
+  const monthEnd = new Date(selected);
+  monthEnd.setUTCMonth(monthEnd.getUTCMonth() + 1, 0);
+  const first = Math.min(monday, 1), last = Math.max(monday + 6, monthEnd.getUTCDate());
+  const calendarOverrides = {}, weekOverrides = {}, attendedDates = [];
+  let nextEnd = Infinity;
+  const day = new Date(selected);
+  day.setUTCDate(first);
+  for (let n = first; n <= last; n++, day.setUTCDate(day.getUTCDate() + 1)) {
+    const key = day.toISOString().slice(0, 10);
+    const reservations = store.classReservations?.[key];
+    const ownTime = !user.isAdmin && reservations && bookedClass(reservations, user.id);
+    if (!ownTime && !store.classSchedules?.[key]) continue;
+    const schedule = scheduleDay(store, key, instant);
+    const override = schedule.dayClosed || (schedule.classes.length && schedule.classes.every(slot => slot.cancelled)) ? 'closed' :
+      schedule.classes.some(slot => slot.kind === 'special' && !slot.cancelled) ? 'special' : null;
+    if (override) {
+      calendarOverrides[key] = override;
+      if (n >= monday && n <= monday + 6) weekOverrides[key] = override;
+    }
+    if (!ownTime) continue;
+    const slot = schedule.classes.find(item => item.startTime === ownTime);
+    if (!slot || slot.cancelled || reservations[ownTime].indexOf(user.id) >= slot.capacity) continue;
+    const end = Date.parse(key + 'T' + slot.endTime + ':00+09:00');
+    if (end <= instant) attendedDates.push(key);
+    else nextEnd = Math.min(nextEnd, end);
+  }
+  return { calendarOverrides, weekOverrides, ...(!user.isAdmin && { attendedDates }),
+    ...(Number.isFinite(nextEnd) && { attendanceRefreshAfterMs: nextEnd - instant }) };
 }
 
 function withQueues(store, date, day) {
@@ -61,7 +94,7 @@ function createReservationService({ getStore, commit, ApiError, now = Date.now, 
       return slot;
     });
     return { ...schedule, classes, date, today: seoulCalendar.format(instant), opensAt, notOpenYet,
-      weekOverrides: weekOverrides(store, date, instant), myClassStartTime: bookedClass(day, user.id),
+      ...calendarSummary(store, user, date, instant), myClassStartTime: bookedClass(day, user.id),
       ...(!user.isAdmin && { membership: membershipView(store, user.id) }) };
   }
 

@@ -61,6 +61,51 @@ function fixture(initialStore = box(), persist = () => {}, promotionHooks = {}) 
 const classAt = (day, startTime = CLASS) => day.classes.find(slot => slot.startTime === startTime);
 const clientError = error => error instanceof ApiError && error.status >= 400 && error.status < 500;
 
+test('attendance follows the signed-in member’s confirmed class at the Seoul end time', async () => {
+  const store = box();
+  const full = store.users.slice(1, 19).map(user => user.id);
+  store.classReservations = {
+    '2026-11-02': { '09:40': ['u1'] },
+    '2026-11-03': { '09:40': ['u2'] },
+    '2026-11-04': { '09:40': [...full, 'u1'] },
+    '2026-11-05': { '09:40': ['u1'] },
+    '2026-11-07': { '10:00': ['u1'] },
+    [MONDAY]: { '21:30': ['u1'] },
+  };
+  store.classSchedules = {
+    '2026-11-05': {cancelled:{'09:40':{reason:'휴강'}}},
+    '2026-11-07': {specials:[{startTime:'10:00',endTime:'11:00',capacity:1,waitlistCapacity:2}]},
+  };
+  const f = fixture(store);
+  f.setTime('2026-11-30T22:19:59.999+09:00');
+  const before = await f.day();
+  assert.deepEqual(before.attendedDates, ['2026-11-02','2026-11-07']);
+  assert.equal(before.attendanceRefreshAfterMs, 1);
+  assert.equal(before.calendarOverrides['2026-11-07'], 'special');
+  assert.equal(before.weekOverrides['2026-11-07'], undefined);
+  f.setTime('2026-11-30T22:20:00+09:00');
+  const after = await f.day();
+  assert.deepEqual(after.attendedDates, ['2026-11-02','2026-11-07',MONDAY]);
+  assert.equal(after.attendanceRefreshAfterMs, undefined);
+  assert.deepEqual((await f.day('u2')).attendedDates, ['2026-11-03','2026-11-04']);
+  assert.equal((await f.day('admin')).attendedDates, undefined);
+  assert.deepEqual((await f.day('u1', '2026-12-01')).attendedDates, [MONDAY]);
+  assert.deepEqual((await f.day('u1', '2026-12-08')).attendedDates, []);
+});
+
+test('cancelling, moving and being promoted update the class used for attendance', async () => {
+  const f = fixture();
+  for (let i = 1; i <= 19; i++) await f.change('u' + i);
+  await f.change('u1', 'cancel');
+  await f.move('u2', CLASS, '21:30');
+  f.setTime('2026-11-30T10:30:00+09:00');
+  assert.deepEqual((await f.day('u1')).attendedDates, []);
+  assert.deepEqual((await f.day('u2')).attendedDates, []);
+  assert.deepEqual((await f.day('u19')).attendedDates, [MONDAY]);
+  f.setTime('2026-11-30T22:20:00+09:00');
+  assert.deepEqual((await f.day('u2')).attendedDates, [MONDAY]);
+});
+
 test('weekly schedule and today follow the Korean calendar', async () => {
   const f = fixture();
   const current = await f.day('u1', null);
