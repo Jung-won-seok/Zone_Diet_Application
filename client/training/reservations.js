@@ -112,7 +112,7 @@ function bookingMembershipCard(membership, date) {
   if (membership.kind === 'period') description = '기간권';
   if (membership.kind === 'visits') description = `횟수권 · 잔여 ${escapeHTML(membership.remainingVisits)}회`;
   if (membership.expiresOn) description += ` · ${escapeHTML(membership.expiresOn)}까지`;
-  const restriction = expired ? '선택한 수업일은 회원권 유효기간이 지났습니다.'
+  const restriction = expired ? `${escapeHTML(date)} 기준으로 회원권 유효기간이 지났습니다.`
     : exhausted ? '남은 횟수가 없어 새 수업을 신청할 수 없습니다.' : '';
   return `<section class="booking-membership" aria-label="내 회원권"><h2>내 회원권</h2>
     <p>${description}</p>${restriction ? '<p class="booking-membership-limit">' + restriction + '</p>' : ''}</section>`;

@@ -101,7 +101,7 @@ function paintNaverOnboarding() {
     await mountNaverOnboarding();
   });
   host.querySelector('#onboarding-connect-naver')?.addEventListener('click',async event=>{
-    if(session.pendingApproval){document.querySelector('#logout-button')?.click();return;}
+    if(session.pendingApproval){await logout();return;}
     const button=event.currentTarget;button.disabled=true;errorNode.textContent='';
     try {const result=await api('/api/naver/connect',{method:'POST',body:'{}'});if(naverOnboardingPage!==current||!host.isConnected)return;location.assign(naverAuthorizeUrl(result.authorizeUrl));}
     catch(error){if(naverOnboardingPage===current&&host.isConnected){errorNode.textContent=error.message;button.disabled=false;}}

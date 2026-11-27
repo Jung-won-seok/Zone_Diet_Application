@@ -1,4 +1,4 @@
-const labels = { reservations: '수업 예약', wod: '오늘의 와드', guide: '크로스핏 가이드', members: '박스 회원 관리', zonda: '존다 프로그램', today: '오늘의 현황', team: '우리 팀 식단', board: '전체 식단', record: '데일리 기록', progress: '나의 변화', settings: '내 설정', admin: '팀 · 역할 관리', accounts: '존다 참가자', naver: '네이버 카페 연결', connect: '카페 연동 신청' };
+const labels = { profile: '내 정보', reservations: '수업 예약', wod: '오늘의 와드', guide: '크로스핏 가이드', members: '박스 회원 관리', zonda: '존다 프로그램', today: '오늘의 현황', team: '우리 팀 식단', board: '전체 식단', record: '데일리 기록', progress: '나의 변화', settings: '내 설정', admin: '팀 · 역할 관리', accounts: '존다 참가자', naver: '네이버 카페 연결', connect: '카페 연동 신청' };
 const blankState = () => ({ settings: { name: '', startWeight: '', goalWeight: '' }, records: {} });
 let state = blankState();
 let session = null;
@@ -89,6 +89,7 @@ function loginView(error = '') {
 const memberProgramRoutes = [['today','오늘의 현황','오늘'],['team','우리 팀','우리 팀'],['board','전체 식단','전체 식단'],['record','데일리 기록','기록'],['progress','나의 변화','변화']];
 const adminProgramRoutes = [['admin','팀 · 역할 관리','팀 관리'],['accounts','존다 참가자','참가자'],['naver','네이버 카페 연결','카페 연결'],['board','전체 식단','전체 식단']];
 function resolvePage(route, detail) {
+  if (route === 'profile') return 'profile';
   if (session.pendingApproval) return 'connect';
   if (route === 'members' && session.isAdmin) return 'members';
   if (!route || route === 'reservations') return 'reservations';
@@ -104,11 +105,11 @@ function resolvePage(route, detail) {
 function renderShell(page) {
   document.body.classList.toggle('is-admin', session.isAdmin);
   document.body.classList.toggle('is-pending-member', Boolean(session.pendingApproval));
-  const inBox = ['reservations','wod','guide','members','zonda'].includes(page);
+  const inBox = ['reservations','wod','guide','members','zonda','profile'].includes(page);
   document.body.classList.toggle('in-box', inBox);
   document.body.classList.toggle('in-zonda', !inBox && !session.pendingApproval);
   const boxReturn = document.querySelector('.box-return');
-  const onBoxPage = inBox && page !== 'zonda';
+  const onBoxPage = inBox && page !== 'zonda' && page !== 'profile';
   boxReturn.hidden = onBoxPage || Boolean(session.pendingApproval);
   if (onBoxPage) {
     const boxHash = '#' + page;
@@ -140,7 +141,7 @@ function renderShell(page) {
   settingsLink.innerHTML = navLabel('settings','프로그램 설정','설정');
   settingsLink.setAttribute('aria-label','프로그램 설정');
   settingsLink.setAttribute('draggable','false');
-  document.querySelector('.program-label').textContent = inBox ? '박스 메뉴' : session.pendingApproval ? '카페 연결 준비' : bootstrap.program.name;
+  document.querySelector('.program-label').textContent = session.pendingApproval ? '카페 연결 준비' : inBox ? '박스 메뉴' : bootstrap.program.name;
   document.querySelector('.settings-link').style.display = inBox || session.isAdmin || session.pendingApproval ? 'none' : '';
   document.querySelectorAll('[data-page]').forEach(node => {
     const current = node.dataset.page === page;
@@ -149,18 +150,63 @@ function renderShell(page) {
     if (current || section) node.setAttribute('aria-current', current ? 'page' : 'location');
     else node.removeAttribute('aria-current');
   });
-  document.querySelector('.profile').innerHTML = `<span class="avatar">${session.isAdmin ? 'AD' : escapeHTML(session.name.slice(-2))}</span><span>${escapeHTML(session.name)}</span><button id="logout-button" type="button">로그아웃</button>`;
-  document.querySelector('#logout-button').addEventListener('click', async () => {
-    if (navigationPending || personalSaving) return;
-    if (wodIsDirty() && !confirm('저장하지 않은 와드 입력을 버리고 로그아웃할까요?')) return;
-    if (boxMembersIsDirty() && !confirm('회원 등록 화면에서 나가시겠어요?')) return;
-    if (personalIsDirty() && !confirm('저장하지 않은 기록을 버리고 로그아웃할까요?')) return;
-    if (naverIsDirty() && !confirm('저장하지 않은 카페 연결 설정이 있습니다. 로그아웃할까요?')) return;
-    if(mealsHasUnsaved() && !await confirmMealDiscard()) return;
-    if (typeof adminIsDirty === 'function' && adminIsDirty() && !confirm('저장하지 않은 팀 편성 변경이 있습니다. 로그아웃할까요?')) return;
-    try { await disableBookingPushOnLogout(); await api('/api/logout', {method:'POST',body:'{}'}); session = null; bootstrap = null; csrfToken = ''; state = blankState(); resetAdminDraft(); location.hash = ''; render(); }
-    catch(error) { toast(error.message); }
-  });
+  const name = escapeHTML(session.name);
+  document.querySelector('.profile').innerHTML = `<a class="profile-link" href="#profile" aria-label="${name}님의 내 정보"${page === 'profile' ? ' aria-current="page"' : ''}>
+    <span class="avatar" aria-hidden="true">${session.isAdmin ? 'AD' : escapeHTML(session.name.slice(-2))}</span>
+    <span class="profile-name">${name}</span><span aria-hidden="true">›</span></a>`;
+}
+async function logout() {
+  if (navigationPending || personalSaving) return;
+  if (wodIsDirty() && !confirm('저장하지 않은 와드 입력을 버리고 로그아웃할까요?')) return;
+  if (boxMembersIsDirty() && !confirm('회원 등록 화면에서 나가시겠어요?')) return;
+  if (personalIsDirty() && !confirm('저장하지 않은 기록을 버리고 로그아웃할까요?')) return;
+  if (naverIsDirty() && !confirm('저장하지 않은 카페 연결 설정이 있습니다. 로그아웃할까요?')) return;
+  if (mealsHasUnsaved() && !await confirmMealDiscard()) return;
+  if (adminIsDirty() && !confirm('저장하지 않은 팀 편성 변경이 있습니다. 로그아웃할까요?')) return;
+  navigationPending = true;
+  try {
+    await disableBookingPushOnLogout();
+    await api('/api/logout', {method:'POST',body:'{}'});
+    session = null; bootstrap = null; csrfToken = ''; state = blankState(); resetAdminDraft();
+    location.hash = ''; render();
+  } catch (error) { toast(error.message); }
+  finally { navigationPending = false; }
+}
+function profileView() {
+  const { name, username, isAdmin, pendingApproval } = session;
+  const member = !isAdmin && !pendingApproval;
+  const settingsRoute = pendingApproval ? 'connect' : isAdmin ? 'naver' : bootstrap.zondaParticipant ? 'settings' : null;
+  const settingsLabel = settingsRoute === 'settings' ? '존다 프로그램 설정' : labels[settingsRoute];
+  return `<div class="account-page"><h1>내 정보</h1>
+    <section class="card"><h2>계정 정보</h2><dl class="account-details">
+      <dt>이름</dt><dd>${escapeHTML(name)}</dd>
+      ${username ? `<dt>아이디</dt><dd>${escapeHTML(username)}</dd>` : '<dt>로그인 방식</dt><dd>네이버</dd>'}
+      <dt>계정 유형</dt><dd>${pendingApproval ? '승인 대기' : isAdmin ? '관리자' : '박스 회원'}</dd>
+    </dl></section>
+    ${member ? '<div id="profile-membership" aria-live="polite"></div>' : ''}
+    <section class="card account-settings"><h2>설정</h2>
+      ${member ? '<div id="booking-notifications"></div>' : ''}
+      ${settingsRoute ? `<a class="account-action" href="#${settingsRoute}">${settingsLabel}<span aria-hidden="true">›</span></a>` : ''}
+    </section>
+    <button class="account-signout" type="button" id="logout-button">로그아웃</button></div>`;
+}
+function mountProfile() {
+  document.querySelector('#logout-button').addEventListener('click', logout);
+  if (session.isAdmin || session.pendingApproval) return;
+  mountBookingNotifications();
+  const host = document.querySelector('#profile-membership');
+  async function loadMembership() {
+    host.innerHTML = '<p>회원권을 불러오는 중…</p>';
+    try {
+      const pass = await api('/api/membership');
+      if (host.isConnected) host.innerHTML = bookingMembershipCard(pass, bookingKoreaDate.format(new Date()));
+    } catch (error) {
+      if (!host.isConnected) return;
+      host.innerHTML = `<p>${escapeHTML(error.message)}</p><button type="button" class="button secondary">회원권 다시 불러오기</button>`;
+      host.querySelector('button').addEventListener('click', loadMembership);
+    }
+  }
+  loadMembership();
 }
 function heading(kicker, title, subtitle, extra = '') { return `<div class="page-heading"><div><div class="eyebrow">${kicker}</div><h1>${title}</h1><p class="subtitle">${subtitle}</p></div>${extra}</div>`; }
 function stat(label, value, unit, note, icon) { return `<div class="stat"><div class="stat-label"><span>${label}</span><span>${icon}</span></div><div class="stat-value">${escapeHTML(value || '—')}<small>${unit}</small></div><p class="stat-note">${note}</p></div>`; }
@@ -244,10 +290,11 @@ function render() {
   document.querySelector('.topbar > span:first-child').firstChild.textContent = session.isAdmin ? '관리자 ' : '레벤 ';
   mobileNavigation.sync();
   const validDate = date && /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(`${date}T12:00:00`)) && date <= todayKey();
-  const views = {reservations:reservationsView, wod:wodView, guide:guideView, members:boxMembersView,
+  const views = {profile:profileView, reservations:reservationsView, wod:wodView, guide:guideView, members:boxMembersView,
     zonda:() => '<div class="page-heading"><h1>존다 프로그램</h1><p class="subtitle">팀별로 식단과 운동을 기록하는 8주 프로그램입니다. 참여를 원하면 박스 관리자에게 참가 등록을 요청해주세요.</p></div>',
     today:todayView,team:()=>mealLoadingView(false),board:()=>mealLoadingView(true),record:()=>recordView(validDate ? date : todayKey()),progress:progressView,settings:settingsView,admin:adminView,accounts:accountsView,naver:naverAdminView,connect:naverOnboardingView};
   app.innerHTML = views[page]();
+  if (page === 'profile') mountProfile();
   if (page === 'reservations') {
     mountReservations(date);
     mountWodPreview(date);
