@@ -14,7 +14,7 @@ const { createWodService } = require('./wod-server');
 const publicAssets = require('./public-assets');
 const CORE_ROLES = ['diet', 'leader', 'mission', 'sns'];
 const SESSION_AGE = 8 * 60 * 60 * 1000;
-const assetTypes = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.webmanifest': 'application/manifest+json', '.png': 'image/png' };
+const assetTypes = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.webp': 'image/webp' };
 const STATIC = new Map(publicAssets.map(file => ['/' + file, [file, assetTypes[path.extname(file)]]]));
 STATIC.set('/', STATIC.get('/index.html'));
 const isLocalHost = host => /^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(host);

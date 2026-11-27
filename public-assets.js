@@ -6,6 +6,8 @@ module.exports = [
   'reservations.js', 'member-management.js',
   'schedule-ui.js', 'schedule-ui.css', 'memberships.css',
   'guide-movements.js', 'guide-benchmarks.js', 'guide-terms.js', 'guide-match.js', 'guide.js', 'guide.css',
+  'guide-movement-art.js', 'guide-movement-art.css', 'guide-movement-poses.png', 'guide-term-art.js', 'guide-term-art.css',
+  'guide-wod-gear.webp', 'guide-portrait-murph.webp', 'guide-portrait-dt.webp',
   'motion-strength.js', 'motion-bodyweight.js', 'motion-equipment.js', 'motion-muscle-ups.js', 'motion-timeline.js',
   'motion-renderer.js', 'motion-muscles.js', 'motion-muscle-view.js', 'motion-muscles.css',
   'motion-3d-model.js', 'motion-3d-renderer.js', 'motion-3d-controls.js', 'motion-3d.css',
