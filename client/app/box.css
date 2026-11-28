@@ -249,18 +249,63 @@
 }
 
 .booking-week-pager {
-  max-width: 100%;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding-block: 6px;
   word-break: keep-all;
 }
 
-.booking-week-pager .booking-arrow {
+.booking-week-title {
+  display: grid;
+  gap: 3px;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+
+.booking-week-title small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.booking-week-title strong {
+  font-size: clamp(18px, 2vw, 22px);
+  font-weight: 700;
+  letter-spacing: -.045em;
+  text-wrap: balance;
+}
+
+.booking-week-arrows {
+  display: flex;
+  align-items: center;
   flex: none;
-  min-height: 44px;
-  padding-inline: 10px;
-  border: 1px solid var(--line);
-  font-size: 14px;
-  white-space: nowrap;
+  border-radius: 999px;
+  background: var(--bg);
+}
+
+.booking-week-arrows a {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  color: var(--green);
+  border-radius: inherit;
+}
+
+.booking-week-arrows a::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border: solid currentColor;
+  border-width: 2px 2px 0 0;
+  transform: rotate(-135deg);
+}
+
+.booking-week-arrows a:last-child::before { transform: rotate(45deg); }
+.booking-week-arrows a:is(:hover, :active, :focus-visible) {
+  background: #e5ebe2;
 }
 
 .booking-date-tools input {
@@ -577,7 +622,7 @@
   .booking-calendar { padding: 10px 8px; }
   .booking-calendar-head { gap: 2px; }
   .booking-week-controls, .booking-date-tools { gap: 0; }
-  .booking-week-pager { width: 100%; justify-content: space-between; gap: 6px; }
+  .booking-week-pager { width: 100%; justify-content: space-between; gap: 10px; padding-inline: 4px; }
   .booking-week-pager + .booking-date-tools { margin-inline-start: auto; }
   .booking-week-controls span { font-size: 14px; }
   .booking-arrow { min-width: 34px; min-height: 44px; padding: 0 4px; }

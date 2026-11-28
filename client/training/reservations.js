@@ -3,7 +3,6 @@ let recentReservationDay = null;
 
 const bookingWeekday = new Intl.DateTimeFormat('ko-KR', { weekday: 'short', timeZone: 'UTC' });
 const bookingDayLabel = new Intl.DateTimeFormat('ko-KR', { month: 'long', day: 'numeric', weekday: 'long', timeZone: 'UTC' });
-const bookingWeekRange = new Intl.DateTimeFormat('ko-KR', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
 const bookingKoreaDate = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'Asia/Seoul' });
 const bookingOpeningLabel = new Intl.DateTimeFormat('ko-KR', {
   month: 'long', day: 'numeric', weekday: 'long', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'Asia/Seoul'
@@ -51,10 +50,24 @@ function shiftBookingMonth(date, delta) {
   return end.toISOString().slice(0, 10);
 }
 
+function bookingWeekHeading(first, selectedDate) {
+  const start = new Date(first + 'T12:00:00Z');
+  const end = new Date(shiftBookingDate(first, 6) + 'T12:00:00Z');
+  const firstYear = start.getUTCFullYear(), lastYear = end.getUTCFullYear();
+  const years = firstYear === lastYear ? firstYear + '년' : firstYear + '–' + lastYear + '년';
+  const startMonth = start.getUTCMonth() + 1, endMonth = end.getUTCMonth() + 1;
+  const endLabel = (startMonth === endMonth ? '' : endMonth + '월 ') + end.getUTCDate() + '일';
+  return `<div class="booking-week-pager">
+    <h2 class="booking-week-title"><small>${years}</small><strong>${startMonth}월 ${start.getUTCDate()}일 – ${endLabel}</strong></h2>
+    <div class="booking-week-arrows">
+      <a href="#reservations/${shiftBookingDate(selectedDate, -7)}" aria-label="이전 주" title="이전 주"></a>
+      <a href="#reservations/${shiftBookingDate(selectedDate, 7)}" aria-label="다음 주" title="다음 주"></a>
+    </div></div>`;
+}
+
 function bookingCalendar(page) {
   const selected = new Date(page.date + 'T12:00:00Z');
   const monthly = page.calendarMode === 'month';
-  const period = monthly ? '달' : '주';
   const first = monthly ? page.date.slice(0, 7) + '-01' : shiftBookingDate(page.date, -((selected.getUTCDay() + 6) % 7));
   const monthEnd = new Date(first + 'T12:00:00Z');
   monthEnd.setUTCMonth(monthEnd.getUTCMonth() + 1, 0);
@@ -78,18 +91,17 @@ function bookingCalendar(page) {
   }).join('');
   const weekdays = monthly ? ['월','화','수','목','금','토','일'].map(label => `<span class="booking-weekday" aria-hidden="true">${label}</span>`).join('') : '';
   const blanks = monthly ? (new Date(first + 'T12:00:00Z').getUTCDay() + 6) % 7 : 0;
-  const step = delta => monthly ? shiftBookingMonth(page.date, delta) : shiftBookingDate(page.date, delta * 7);
-  const periodLabel = monthly ? `${selected.getUTCFullYear()}년 ${selected.getUTCMonth() + 1}월`
-    : bookingWeekRange.formatRange(new Date(first + 'T12:00:00Z'), new Date(shiftBookingDate(first, 6) + 'T12:00:00Z'));
+  const heading = monthly ? `<div class="booking-week-controls">
+    <a href="#reservations/${shiftBookingMonth(page.date, -1)}" class="booking-arrow" aria-label="이전 달">‹</a>
+    <span>${selected.getUTCFullYear()}년 ${selected.getUTCMonth() + 1}월</span>
+    <a href="#reservations/${shiftBookingMonth(page.date, 1)}" class="booking-arrow" aria-label="다음 달">›</a></div>`
+    : bookingWeekHeading(first, page.date);
   return `<section class="booking-calendar" aria-label="예약 날짜 선택" data-no-swipe>
     <div class="booking-calendar-toolbar"><div class="booking-calendar-modes" role="group" aria-label="달력 보기">
       <button type="button" data-calendar-mode="week" aria-pressed="${!monthly}">주간</button>
       <button type="button" data-calendar-mode="month" aria-pressed="${monthly}">월간</button></div>
       ${page.data?.attendedDates ? `<span class="booking-attendance-total" aria-live="polite">${monthly ? (selected.getUTCMonth() + 1) + '월' : '주간'} 출석 <strong>${attendanceCount}일</strong></span>` : ''}</div>
-    <div class="booking-calendar-head"><div class="booking-week-controls${monthly ? '' : ' booking-week-pager'}">
-      <a href="#reservations/${step(-1)}" class="booking-arrow" aria-label="이전 ${period}">${monthly ? '‹' : '‹ 이전 주'}</a>
-      <span>${periodLabel}</span>
-      <a href="#reservations/${step(1)}" class="booking-arrow" aria-label="다음 ${period}">${monthly ? '›' : '다음 주 ›'}</a></div>
+    <div class="booking-calendar-head">${heading}
       <div class="booking-date-tools"><a href="#reservations/${page.today}" class="booking-today">오늘</a>
       <label><span class="sr-only">날짜 직접 선택</span><input type="date" id="booking-date" value="${page.date}" required></label></div></div>
     <div class="booking-week${monthly ? ' booking-month' : ''}">${weekdays}${'<span aria-hidden="true"></span>'.repeat(blanks)}${days}</div>

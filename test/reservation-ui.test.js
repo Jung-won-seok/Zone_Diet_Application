@@ -152,16 +152,18 @@ test('weekly is the default and only visible attendance counts, including across
   assert.match(month, /href="#reservations\/2026-12-01" class="booking-arrow" aria-label="이전 달"/);
 });
 
-test('visible week links advance and return to the selected weekday across New Year', () => {
+test('week controls advance and return to the selected weekday across New Year', () => {
   const week = date => ui.bookingCalendar({ date, today: '2026-12-25', calendarMode: 'week' });
   function destination(html, label) {
-    const links = [...html.matchAll(/<a href="#reservations\/([\d-]+)" class="booking-arrow"[^>]*>([^<]+)<\/a>/g)];
-    return links.find(link => link[2].includes(label))?.[1];
+    const links = [...html.matchAll(/<a href="#reservations\/([\d-]+)" aria-label="([^"]+)"/g)];
+    return links.find(link => link[2] === label)?.[1];
   }
   const date = destination(week('2026-12-25'), '다음 주');
   assert.equal(date, '2027-01-01');
   const nextWeek = week(date);
-  assert.match(nextWeek, /2026년 12월 28일\s*~\s*2027년 1월 3일/);
+  assert.match(nextWeek, /<small>2026–2027년<\/small><strong>12월 28일 – 1월 3일<\/strong>/);
+  assert.match(week('2026-11-28'), /<small>2026년<\/small><strong>11월 23일 – 29일<\/strong>/);
+  assert.match(week('2026-12-01'), /<strong>11월 30일 – 12월 6일<\/strong>/);
   assert.match(nextWeek, /class="booking-day" href="#reservations\/2027-01-01"[^>]*aria-current="date"/);
   assert.equal(destination(nextWeek, '다음 주'), '2027-01-08');
   assert.equal(destination(nextWeek, '이전 주'), '2026-12-25');
