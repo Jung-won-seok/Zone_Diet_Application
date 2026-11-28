@@ -248,6 +248,21 @@
   background: #eef0ec;
 }
 
+.booking-week-pager {
+  max-width: 100%;
+  text-align: center;
+  word-break: keep-all;
+}
+
+.booking-week-pager .booking-arrow {
+  flex: none;
+  min-height: 44px;
+  padding-inline: 10px;
+  border: 1px solid var(--line);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
 .booking-date-tools input {
   height: 40px;
   width: 10rem;
@@ -562,6 +577,8 @@
   .booking-calendar { padding: 10px 8px; }
   .booking-calendar-head { gap: 2px; }
   .booking-week-controls, .booking-date-tools { gap: 0; }
+  .booking-week-pager { width: 100%; justify-content: space-between; gap: 6px; }
+  .booking-week-pager + .booking-date-tools { margin-inline-start: auto; }
   .booking-week-controls span { font-size: 14px; }
   .booking-arrow { min-width: 34px; min-height: 44px; padding: 0 4px; }
   .booking-today { min-height: 44px; padding: 0 6px; }
