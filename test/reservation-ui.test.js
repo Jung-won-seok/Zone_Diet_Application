@@ -79,6 +79,54 @@ test('returning members see the last schedule while actions wait for the live re
   requests[4].resolve(data); await relogin;
 });
 
+test('slow week changes keep the displayed day intact and only commit the last request', async () => {
+  const requests = [], frames = [];
+  const sessions = {setAttribute(){}}, refresh = {}, announcement = {};
+  const feedback = {classList:{toggle(){}}};
+  const arrows = [-1,1].map(step => ({dataset:{bookStep:String(step)}, setAttribute(name,value){this[name]=value;}}));
+  const host = {
+    parentElement:{querySelector:selector => selector === '.booking-rules' ? {} : announcement},
+    querySelectorAll:selector => selector === '[data-book-step]' ? arrows : [],
+    querySelector:selector => ({'[data-calendar-mode="week"][aria-pressed="true"]':{},'.booking-sessions':sessions,
+      '[data-book-refresh]':refresh,'.booking-feedback':feedback})[selector],
+    set innerHTML(html) { frames.push(html); }
+  };
+  const ctx = vm.createContext({
+    session:{id:'member'}, csrfToken:'token', AbortController, clearTimeout, setTimeout, escapeHTML:String,
+    document:{querySelector:()=>host, addEventListener(){}, removeEventListener(){}},
+    window:{matchMedia:()=>({matches:false, addEventListener(){}, removeEventListener(){}})},
+    api(url, options) {
+      return new Promise((resolve,reject) => requests.push({url,signal:options.signal,resolve,reject}));
+    }
+  });
+  vm.runInContext(reservationSource, ctx);
+  const day = date => ({date, today:'2026-11-28', classes:[], attendedDates:[], membership:{kind:'unassigned'}});
+  const first = ctx.mountReservations('2026-11-28');
+  requests[0].resolve(day('2026-11-28'));
+  await first;
+  const count = frames.length;
+  const next = ctx.mountReservations('2026-12-05', 'week', true);
+  const latest = ctx.mountReservations('2026-12-12', 'week', true);
+  assert.equal(frames.length, count);
+  assert.match(frames.at(-1), /href="#reservations\/2026-11-28"[^>]*aria-current="date"/);
+  assert.equal(arrows[1].href, '#reservations/2026-12-19');
+  assert.equal(sessions.inert, true);
+  assert.equal(requests[1].signal.aborted, true);
+  requests[2].resolve(day('2026-12-12'));
+  await latest;
+  requests[1].resolve(day('2026-12-05'));
+  await next;
+  assert.equal(frames.length, count + 1);
+  assert.match(frames.at(-1), /12월 12일 토요일<\/h2>/);
+  assert.match(frames.at(-1), /href="#reservations\/2026-12-12"[^>]*aria-current="date"/);
+  const failed = ctx.mountReservations('2026-12-19', 'week', true);
+  requests[3].reject(new Error('연결 끊김'));
+  await failed;
+  assert.match(frames.at(-1), /12월 19일 토요일<\/h2>/);
+  assert.equal(feedback.textContent, '연결 끊김');
+  assert.doesNotMatch(frames.at(-1), /data-book-action=/);
+});
+
 test('a future class can be browsed before bookings open at Korean midnight', () => {
   const row = slot({ notOpenYet: true });
   const html = ui.bookingClassRow(row, false, null);

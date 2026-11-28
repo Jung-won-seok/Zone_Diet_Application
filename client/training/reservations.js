@@ -51,6 +51,11 @@ function shiftBookingMonth(date, delta) {
   return end.toISOString().slice(0, 10);
 }
 
+function bookingPeriodHref(page, direction) {
+  const date = page.calendarMode === 'month' ? shiftBookingMonth(page.date, direction) : shiftBookingDate(page.date, direction * 7);
+  return '#reservations/' + date;
+}
+
 function bookingWeekStrip(page, first, days, datePicker) {
   const start = new Date(first + 'T12:00:00Z');
   const end = new Date(shiftBookingDate(first, 6) + 'T12:00:00Z');
@@ -59,9 +64,9 @@ function bookingWeekStrip(page, first, days, datePicker) {
       <a href="#reservations/${page.today}" class="booking-strip-today">오늘</a></div>
     <div class="booking-week">${days}</div>
     <div class="booking-strip-nav">
-      <a href="#reservations/${shiftBookingDate(page.date, -7)}" aria-label="이전 주"><span aria-hidden="true">←</span> 이전 주</a>
+      <a href="${bookingPeriodHref(page, -1)}" aria-label="이전 주" data-book-step="-1"><span aria-hidden="true">←</span> 이전 주</a>
       ${datePicker}
-      <a href="#reservations/${shiftBookingDate(page.date, 7)}" aria-label="다음 주">다음 주 <span aria-hidden="true">→</span></a>
+      <a href="${bookingPeriodHref(page, 1)}" aria-label="다음 주" data-book-step="1">다음 주 <span aria-hidden="true">→</span></a>
     </div></div>`;
 }
 
@@ -93,9 +98,9 @@ function bookingCalendar(page) {
   const blanks = monthly ? (new Date(first + 'T12:00:00Z').getUTCDay() + 6) % 7 : 0;
   const datePicker = `<label><span class="sr-only">날짜 직접 선택</span><input type="date" id="booking-date" value="${page.date}" required></label>`;
   const calendar = monthly ? `<div class="booking-calendar-head"><div class="booking-week-controls">
-      <a href="#reservations/${shiftBookingMonth(page.date, -1)}" class="booking-arrow" aria-label="이전 달">‹</a>
+      <a href="${bookingPeriodHref(page, -1)}" class="booking-arrow" aria-label="이전 달" data-book-step="-1">‹</a>
       <span>${bookingMonthLabel.format(selected)}</span>
-      <a href="#reservations/${shiftBookingMonth(page.date, 1)}" class="booking-arrow" aria-label="다음 달">›</a></div>
+      <a href="${bookingPeriodHref(page, 1)}" class="booking-arrow" aria-label="다음 달" data-book-step="1">›</a></div>
       <div class="booking-date-tools"><a href="#reservations/${page.today}" class="booking-today">오늘</a>${datePicker}</div></div>
     <div class="booking-week booking-month">${weekdays}${'<span aria-hidden="true"></span>'.repeat(blanks)}${days}</div>`
     : bookingWeekStrip(page, first, days, datePicker);
@@ -235,11 +240,40 @@ function bookingClassList(page, pastOpen) {
       <summary>지난 수업 ${past.length}개</summary>${list(past)}</details>`;
 }
 
+function restoreBookingFocus(host, focused) {
+  if (!focused || focused.isConnected) return;
+  const selector = focused.dataset.calendarMode ? `[data-calendar-mode="${focused.dataset.calendarMode}"]` :
+    focused.id === 'booking-date' ? '#booking-date' : focused.matches('[data-book-refresh]') ? '[data-book-refresh]' :
+    focused.dataset.bookStep ? `[data-book-step="${focused.dataset.bookStep}"]` :
+    focused.matches('a[href]') ? `a[href="${focused.getAttribute('href')}"]` : focused.matches('.booking-past summary') ? '.booking-past summary' : null;
+  if (selector) host.querySelector(selector)?.focus({ preventScroll: true });
+}
+
 function paintReservationDay(page) {
   if (reservationPage !== page) return;
   const host = page.host;
-  const openRosters = new Set([...host.querySelectorAll('details[data-roster][open]')].map(node => node.dataset.roster));
   const focused = host.ownerDocument?.activeElement;
+  if (page.displayedDay && page.busy && !page.data) {
+    // Keep the visible date and its classes together until the requested day is ready.
+    if (!host.querySelector(`[data-calendar-mode="${page.calendarMode}"][aria-pressed="true"]`)) {
+      const visible = { ...page, date: page.displayedDay.date, today: page.displayedDay.today, data: page.displayedDay };
+      host.querySelector('.booking-calendar').outerHTML = bookingCalendar(visible);
+    }
+    host.querySelectorAll('[data-book-step]').forEach(link => {
+      link.setAttribute('href', bookingPeriodHref(page, Number(link.dataset.bookStep)));
+    });
+    const sessions = host.querySelector('.booking-sessions');
+    sessions.inert = true;
+    sessions.setAttribute('aria-busy', 'true');
+    host.querySelector('[data-book-refresh]').textContent = '조회 중…';
+    const announcement = host.parentElement.querySelector('[data-book-announcement]');
+    announcement.textContent = bookingDayLabel.format(new Date(page.date + 'T12:00:00Z')) + ' 수업을 불러오는 중입니다.';
+    if (page.coachHost) page.coachHost.inert = true;
+    restoreBookingFocus(host, focused);
+    return;
+  }
+  if (page.coachHost) page.coachHost.inert = false;
+  const openRosters = new Set(page.displayedDay ? [] : [...host.querySelectorAll('details[data-roster][open]')].map(node => node.dataset.roster));
   const focusedRow = focused?.closest('[data-book-slot]');
   const activeTime = page.slotFeedback?.request.startTime;
   const activeRow = activeTime && host.querySelector(`[data-book-slot="${activeTime}"]`);
@@ -249,7 +283,7 @@ function paintReservationDay(page) {
   if (page.data) {
     schedule = bookingAvailabilityNotice(page.data);
     if (page.data.classes.length) {
-      schedule += bookingClassList(page, Boolean(host.querySelector('details[data-past][open]')));
+      schedule += bookingClassList(page, !page.displayedDay && Boolean(host.querySelector('details[data-past][open]')));
     } else if (!page.data.dayClosed) {
       schedule += '<p class="booking-empty">이 날짜에는 등록된 수업이 없습니다.</p>';
     }
@@ -277,12 +311,7 @@ function paintReservationDay(page) {
     const selector = focused.dataset.bookAction ? `[data-book-action="${focused.dataset.bookAction}"]` :
       focused.matches('summary') ? 'summary' : '[data-book-verify]';
     (row?.querySelector(selector) || row)?.focus({ preventScroll: true });
-  } else if (focused && host.ownerDocument && !focused.isConnected) {
-    const selector = focused.dataset.calendarMode ? `[data-calendar-mode="${focused.dataset.calendarMode}"]` :
-      focused.id === 'booking-date' ? '#booking-date' : focused.matches('[data-book-refresh]') ? '[data-book-refresh]' :
-      focused.matches('a[href]') ? `a[href="${focused.getAttribute('href')}"]` : focused.matches('.booking-past summary') ? '.booking-past summary' : null;
-    if (selector) host.querySelector(selector)?.focus({ preventScroll: true });
-  }
+  } else restoreBookingFocus(host, focused);
   if (anchor && anchor.bottom > 0 && anchor.top < window.innerHeight) {
     const row = host.querySelector(`[data-book-slot="${activeTime}"]`);
     const result = row?.querySelector('.booking-slot-feedback');
@@ -345,6 +374,7 @@ async function loadReservationDay(page) {
     page.busy = false;
     page.showingSnapshot = false;
     paintReservationDay(page);
+    page.displayedDay = null;
     scheduleReservationRefresh(page);
   }
 }
@@ -423,13 +453,14 @@ async function changeReservation(page, button) {
   }
 }
 
-function mountReservations(date, calendarMode = 'week') {
+function mountReservations(date, calendarMode = 'week', changingDate = false) {
+  const displayedDay = changingDate ? reservationPage.data || reservationPage.displayedDay : null;
   cleanupReservations();
   const host = document.querySelector('#box-schedule');
   if (!host) return;
   const today = bookingKoreaDate.format(new Date());
   const hasDate = validBookingDate(date);
-  const page = { host, calendarMode, date: hasDate ? date : today, today, useServerDate: !hasDate, data: null, busy: false, error: '', slotFeedback: null };
+  const page = { host, calendarMode, date: hasDate ? date : today, today, useServerDate: !hasDate, data: null, displayedDay, busy: false, error: '', slotFeedback: null };
   page.user = session.id;
   page.token = csrfToken;
   page.readController = new AbortController();
@@ -442,7 +473,7 @@ function mountReservations(date, calendarMode = 'week') {
   const rules = host.parentElement.querySelector('.booking-rules');
   page.rulesLayout = window.matchMedia('(min-width: 851px)');
   page.onRulesLayout = () => { rules.open = page.rulesLayout.matches; };
-  page.onRulesLayout();
+  if (!changingDate) page.onRulesLayout();
   page.rulesLayout.addEventListener('change', page.onRulesLayout);
   if (session.isAdmin) page.coachHost = document.querySelector('#coach-schedule');
   reservationPage = page;

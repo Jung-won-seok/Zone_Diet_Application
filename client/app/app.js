@@ -416,6 +416,14 @@ window.addEventListener('hashchange', async () => {
       history.replaceState(destinationState, '', `${location.pathname}${location.search}${nextHash}`);
     }
     const [route, detail] = nextHash.slice(1).split('/');
+    if (route === 'reservations' && session && !session.pendingApproval &&
+        reservationPage?.user === session.id && reservationPage.token === csrfToken) {
+      renderedHash = nextHash;
+      document.querySelector('.box-return').setAttribute('href', nextHash);
+      const ready = mountReservations(detail, reservationPage.calendarMode, true);
+      mountWodPreview(detail, ready);
+      return;
+    }
     const enteringProgram = session && (route === 'zonda' ||
       (document.body.classList.contains('in-box') && !boxPages.has(resolvePage(route, detail))));
     if (enteringProgram && !session.pendingApproval &&

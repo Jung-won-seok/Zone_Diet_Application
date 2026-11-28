@@ -82,11 +82,11 @@ function fixture(hash = '#record/2026-11-10', {isAdmin = false, zondaParticipant
     Date,JSON,FormData:FormValues,location,
     history:{state:null,replaceState(state,_title,url){this.state=state;location.hash=url.includes('#')?url.slice(url.indexOf('#')):'';}},
     document:{body,querySelector:selector=>selector==='#record-form, #settings-form'?form:nodes.get(selector)||null,querySelectorAll:selector=>selector==='[data-page]'?[...links,...localLinks,settings]:[]},
-    window:{addEventListener:(name,fn)=>{listeners[name]=fn;},scrollTo(){},matchMedia:()=>({matches:mobile})},
+    window:{addEventListener:(name,fn)=>{listeners[name]=fn;},scrollTo(){navState.scrolls=(navState.scrolls||0)+1;},matchMedia:()=>({matches:mobile})},
     MobileNavigation:{create(options){navState.options=options;return{cancel(){navState.cancelled++;},sync(){navState.synced.push(links.find(e=>e.classList.contains('active'))?.dataset.page||'settings');}};}},
     fetch:async(url,options)=>{if(initial){initial=false;return new Promise(()=>{});}calls.push({url,options});const result=await response(url,options);return {ok:true,json:async()=>result};},
     setTimeout:()=>0,clearTimeout(){},confirm:message=>{prompts.push(message);return flags.answer;},
-    cleanupMeals(){flags.meal=false;},cleanupNaverUI(){flags.naver=false;},cleanupReservations(){},cleanupBoxMembers(){flags.boxMember=false;},
+    cleanupMeals(){flags.meal=false;},cleanupNaverUI(){flags.naver=false;},cleanupReservations(){ctx.reservationPage=null;},cleanupBoxMembers(){flags.boxMember=false;},
     mealsHasUnsaved:()=>flags.meal,naverIsDirty:()=>flags.naver,adminIsDirty:()=>flags.admin,
     boxMembersIsDirty:()=>flags.boxMember, reservationsView:()=>'<div>수업 예약</div>', boxMembersView:()=>'<div>박스 회원 관리</div>',
     showAccountRecovery(){return false;}, mountWodPreview(){},
@@ -94,9 +94,12 @@ function fixture(hash = '#record/2026-11-10', {isAdmin = false, zondaParticipant
     guideView:()=>'<div>크로스핏 가이드</div>', mountGuide(){navState.guideMounted=true;}, cleanupGuide(){},
     mountWod(date){navState.wodDate=date;navState.wodMounts=(navState.wodMounts||0)+1;},
     restoreWodDate(){navState.restoredWodDate=navState.wodDate;}, cleanupWod(){flags.wod=false;},
-    cleanupBookingNotifications(){}, mountBookingNotifications(){}, disableBookingPushOnLogout(){},
+    cleanupBookingNotifications(){}, mountBookingNotifications(){navState.inboxMounts=(navState.inboxMounts||0)+1;}, disableBookingPushOnLogout(){},
     bookingMembershipCard:pass=>'회원권 ' + pass.kind, bookingKoreaDate:{format:()=>'2026-11-27'},
-    mountBoxMembers(){}, mountReservations(date){navState.bookingDate=date;},
+    reservationPage:null, mountBoxMembers(){}, mountReservations(date, calendarMode='week'){
+      navState.bookingDate=date;
+      ctx.reservationPage={user:user.id,token:'',calendarMode};
+    },
     confirmMealDiscard:()=>flags.mealPrompt?flags.mealPrompt.promise:Promise.resolve(flags.answer),
     resetAdminDraft(){flags.admin=false;},memberTeamBanner:()=>'',mealLoadingView:()=>'<div>식단</div>',
     adminView:()=>'',accountsView:()=>'',naverAdminView:()=>'',naverOnboardingView:()=>'',naverMemberView:()=>'',
@@ -117,6 +120,23 @@ function fixture(hash = '#record/2026-11-10', {isAdmin = false, zondaParticipant
     unload(){const event={preventDefault(){this.prevented=true;}};listeners.beforeunload(event);return event;}
   };
 }
+
+test('paging through reservation dates keeps the shell, scroll and notification inbox mounted', async () => {
+  const f = fixture('#reservations', {mobile:true});
+  const scrolls = f.navState.scrolls, inboxMounts = f.navState.inboxMounts;
+  f.ctx.reservationPage.calendarMode = 'month';
+  for (const date of ['2026-12-05','2026-12-12','2026-12-05']) {
+    await f.navigate('#reservations/' + date);
+    assert.equal(f.navState.bookingDate, date);
+    assert.equal(f.ctx.reservationPage.calendarMode, 'month');
+    assert.equal(f.boxReturn.getAttribute('href'), '#reservations/' + date);
+    assert.equal(f.navState.scrolls, scrolls);
+    assert.equal(f.navState.inboxMounts, inboxMounts);
+  }
+  await f.navigate('#guide');
+  assert.equal(f.active, 'guide');
+  assert.equal(f.ctx.reservationPage, null);
+});
 
 test('returning to the guide after discarding WOD edits preserves the destination history entry', async () => {
   const f = fixture('#wod/2026-11-10');

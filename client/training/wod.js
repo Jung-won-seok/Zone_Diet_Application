@@ -48,22 +48,25 @@ function wodPreviewExcerpt(text) {
   return preview.slice(0, 150).join('').trimEnd() + '…';
 }
 
-async function mountWodPreview(date) {
+async function mountWodPreview(date, scheduleReady) {
   const schedule = document.querySelector('#box-schedule');
   if (!schedule) return;
+  const page = reservationPage;
+  const previous = schedule.parentElement.querySelector('.wod-preview');
   const preview = document.createElement('section');
   preview.className = 'wod-preview';
   preview.setAttribute('aria-label', '선택한 날짜의 와드');
   preview.addEventListener('click', wodGuideClick);
   const utilities = document.querySelector('.booking-utilities');
-  (utilities || schedule).before(preview);
+  if (previous) previous.inert = true;
+  else (utilities || schedule).before(preview);
   const link = document.createElement('a');
   link.href = validBookingDate(date) ? '#wod/' + date : '#wod';
   link.textContent = validBookingDate(date) ? '선택한 날의 와드 보기 →' : '오늘의 와드 보기 →';
   preview.append(link);
   try {
     const day = await readWodDay(date);
-    if (!preview.isConnected) return;
+    if (reservationPage !== page) return;
     const info = document.createElement('div');
     const heading = document.createElement('h2');
     heading.textContent = day.date === day.today ? '오늘의 와드' : dateLabel(day.date) + ' 와드';
@@ -87,7 +90,11 @@ async function mountWodPreview(date) {
     link.href = '#wod/' + day.date;
     link.textContent = heading.textContent + (!day.wod && session.isAdmin ? ' 등록 →' : ' 보기 →');
   } catch {
-    if (preview.isConnected) preview.prepend('와드를 불러오지 못했습니다.');
+    preview.prepend('와드를 불러오지 못했습니다.');
+  }
+  if (previous) {
+    await scheduleReady;
+    if (reservationPage === page && previous.isConnected) previous.replaceWith(preview);
   }
 }
 
