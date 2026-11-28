@@ -161,9 +161,9 @@ test('week controls advance and return to the selected weekday across New Year',
   const date = destination(week('2026-12-25'), '다음 주');
   assert.equal(date, '2027-01-01');
   const nextWeek = week(date);
-  assert.match(nextWeek, /<small>2026–2027년<\/small><strong>12월 28일 – 1월 3일<\/strong>/);
-  assert.match(week('2026-11-28'), /<small>2026년<\/small><strong>11월 23일 – 29일<\/strong>/);
-  assert.match(week('2026-12-01'), /<strong>11월 30일 – 12월 6일<\/strong>/);
+  assert.match(nextWeek, /<h2>2026년 12월\s*~\s*2027년 1월<\/h2>/);
+  assert.match(week('2026-11-28'), /<h2>2026년 11월<\/h2>/);
+  assert.match(week('2026-12-01'), /<h2>2026년 11월\s*~\s*12월<\/h2>/);
   assert.match(nextWeek, /class="booking-day" href="#reservations\/2027-01-01"[^>]*aria-current="date"/);
   assert.equal(destination(nextWeek, '다음 주'), '2027-01-08');
   assert.equal(destination(nextWeek, '이전 주'), '2026-12-25');
